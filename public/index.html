@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toy Soldier RTS - Multiplayer Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; overflow: hidden; background: #090d16; user-select: none; }
+        .selection-box { position: absolute; border: 1px solid rgba(134, 239, 172, 0.8); background: rgba(134, 239, 172, 0.2); pointer-events: none; z-index: 10; }
+        .ui-panel { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-white h-screen w-screen flex flex-col overflow-hidden">
+
+    <!-- -->
+    <header id="top-bar" class="ui-panel flex-none p-3 z-30 flex justify-between items-center shadow-lg border-b border-gray-800">
+        <!-- Player Stats -->
+        <div class="flex gap-4 items-center">
+            <div>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">War Funds</p>
+                <p class="text-xl font-black text-green-400 font-mono">$<span id="player-money">1000</span></p>
+            </div>
+            <div class="border-l border-gray-700 pl-4">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Base Integrity</p>
+                <p class="text-xl font-black text-blue-400 font-mono"><span id="player-hp">5000</span></p>
+            </div>
+            <div class="border-l border-gray-700 pl-4">
+                <button id="supply-btn" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-1 px-3 rounded text-xs transition flex flex-col items-center">
+                    <span>Supply Drop</span>
+                    <span id="supply-time" class="text-[10px] font-mono">READY ($2000)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Deployment / Status Banner -->
+        <div id="prep-banner" class="text-center px-4 py-1 rounded border border-yellow-500/50 bg-yellow-500/10">
+            <h1 class="text-sm font-black text-yellow-400 uppercase tracking-widest" id="prep-title">Deployment Phase</h1>
+            <p class="text-[11px] text-gray-300" id="prep-desc">Deploy forces. Enemy side is obscured.</p>
+            <button id="start-btn" class="mt-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs px-4 py-1 rounded shadow transition">
+                START BATTLE
+            </button>
+        </div>
+
+        <!-- Enemy Stats & Intel -->
+        <div class="flex gap-4 items-center text-right">
+            <div class="flex flex-col gap-0.5 items-end">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Enemy Intel</p>
+                <div class="flex items-center gap-1.5 text-[10px]"><div class="w-2.5 h-2.5 rounded-full bg-[#eab308]"></div> Light Armor</div>
+                <div class="flex items-center gap-1.5 text-[10px]"><div class="w-2.5 h-2.5 bg-[#eab308]"></div> Heavy Armor</div>
+            </div>
+            <div class="border-l border-gray-700 pl-4">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Enemy Base</p>
+                <p class="text-xl font-black text-red-400 font-mono"><span id="enemy-hp">5000</span></p>
+            </div>
+        </div>
+    </header>
+
+    <!-- -->
+    <main id="canvas-container" class="flex-1 relative w-full h-full bg-[#1a1f13] overflow-hidden">
+        <canvas id="gameCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+        <div id="selection-box" class="selection-box hidden"></div>
+    </main>
+
+    <!-- -->
+    <footer id="bottom-bar" class="ui-panel flex-none p-2.5 z-30 flex justify-between items-center shadow-lg border-t border-gray-800 gap-4">
+        <!-- Train Mobile Units -->
+        <div class="flex-1 flex flex-col gap-1">
+            <p class="text-xs font-bold text-gray-300 border-b border-gray-700 pb-0.5">Train Infantry & Armor (Mobile)</p>
+            <div id="build-units" class="flex gap-2 overflow-x-auto py-1"></div>
+        </div>
+        
+        <!-- Construct Defenses -->
+        <div class="flex-1 flex flex-col gap-1 border-l border-gray-700 pl-4">
+            <p class="text-xs font-bold text-gray-300 border-b border-gray-700 pb-0.5">Construct Defenses (Static)</p>
+            <div id="build-defenses" class="flex gap-2 overflow-x-auto py-1"></div>
+        </div>
+    </footer>
+
+    <!-- -->
+    <div id="lobby-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div class="ui-panel rounded-2xl p-8 max-w-md w-full text-center border border-gray-700 shadow-2xl">
+            <h2 class="text-3xl font-black text-green-400 mb-2 uppercase tracking-wide">Toy Soldier RTS</h2>
+            <p class="text-xs text-gray-400 mb-6">Plastic Toy Warfare • Multiplayer Edition</p>
+
+            <div class="space-y-4 text-left mb-6">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1">Commander Call-sign</label>
+                    <input type="text" id="username-input" value="Commander" class="w-full bg-gray-900 border border-gray-700 rounded p-2.5 text-white font-mono text-sm focus:outline-none focus:border-green-500">
+                </div>
+                <div id="lobby-status" class="text-center text-xs font-mono text-yellow-400 py-1 hidden">
+                    Connecting to Render server...
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <button id="find-match-btn" class="w-full bg-green-500 hover:bg-green-400 text-black font-black py-3 rounded-lg shadow-lg text-sm uppercase tracking-wider transition">
+                    Find Online Match
+                </button>
+                <button id="vs-ai-btn" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider transition">
+                    Play vs AI (Single Player)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info / Game Over Overlay -->
+    <div id="info-overlay" class="fixed inset-0 bg-black/85 flex items-center justify-center hidden z-50">
+        <div class="ui-panel rounded-2xl p-8 text-center max-w-md">
+            <h2 id="info-title" class="text-4xl font-black mb-4">VICTORY</h2>
+            <p id="info-desc" class="text-sm text-gray-300 mb-6">The enemy HQ has been demolished.</p>
+            <button onclick="location.reload()" class="bg-green-500 hover:bg-green-400 text-black font-black py-3 px-8 rounded-lg shadow-lg text-sm uppercase tracking-wider">Return to Main Menu</button>
+        </div>
+    </div>
+
+    <script>
+        const canvasContainer = document.getElementById('canvas-container');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = canvasContainer.clientWidth;
+        let height = canvas.height = canvasContainer.clientHeight;
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = canvasContainer.clientWidth;
+            height = canvas.height = canvasContainer.clientHeight;
+            if (game) game.cacheTerrain();
+        });
+
+        // Game Stats & Balance Data
+        const UNITS = {
+            grunt: { name: "Rifleman", cost: 15, hp: 40, damage: 8, range: 110, cooldown: 30, speed: 1.5, weapon: 'light', armor: 'light', desc: "Fast light infantry." },
+            mg: { name: "Machine Gunner", cost: 25, hp: 50, damage: 4, range: 130, cooldown: 10, speed: 1.2, weapon: 'light', armor: 'light', desc: "High fire rate vs light armor." },
+            at: { name: "AT Infantry", cost: 40, hp: 60, damage: 45, range: 130, cooldown: 80, speed: 1.2, weapon: 'heavy', armor: 'light', desc: "Armor-piercing rockets." },
+            tank: { name: "Battle Tank", cost: 150, hp: 400, damage: 60, range: 160, cooldown: 60, speed: 0.8, weapon: 'heavy', armor: 'heavy', desc: "Heavy armor assault unit." }
+        };
+
+        const BUILDINGS = {
+            barricade: { name: "Sandbags", cost: 10, hp: 300, radius: 15, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', desc: "Blocks movement & fire." },
+            pillbox: { name: "MG Pillbox", cost: 60, hp: 350, radius: 18, damage: 12, range: 150, cooldown: 15, weapon: 'light', armor: 'heavy', desc: "Rapid anti-infantry defense." },
+            at_gun: { name: "AT Gun", cost: 90, hp: 200, radius: 16, damage: 160, range: 260, cooldown: 90, weapon: 'heavy', armor: 'medium', desc: "Long-range anti-tank cannon." },
+            artillery: { name: "Howitzer", cost: 275, hp: 80, radius: 20, damage: 100, range: 450, cooldown: 300, weapon: 'explosive', armor: 'light', splash: 80, desc: "Long-range siege battery." }
+        };
+
+        const Utils = {
+            dist: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1)
+        };
+
+        let socket = null;
+        let isMultiplayer = false;
+        let localRole = 'player'; // 'player' (Green/Left) or 'enemy' (Yellow/Right)
+        let opponentReady = false;
+        let localReady = false;
+
+        class Game {
+            constructor() {
+                this.state = 'LOBBY'; // LOBBY, PREP, PLAYING, GAMEOVER
+                this.frameCount = 0;
+                
+                this.money = { player: 1000, enemy: 1000 };
+                this.supplyCooldown = { player: 0, enemy: 0 };
+                this.supplyMax = 1800; // 30s at 60fps
+
+                this.units = [];
+                this.buildings = [];
+                this.bullets = [];
+                this.particles = [];
+
+                this.playerHQ = new HQ('player', 120, height / 2);
+                this.enemyHQ = new HQ('enemy', width - 120, height / 2);
+
+                this.selectedUnits = [];
+                this.buildMode = null; 
+                this.buildType = null;
+
+                this.mouse = { x: 0, y: 0, isDown: false, startX: 0, startY: 0 };
+                
+                this.terrainCanvas = document.createElement('canvas');
+                this.terrainCtx = this.terrainCanvas.getContext('2d');
+                
+                this.initUI();
+                this.bindEvents();
+                this.cacheTerrain();
+            }
+
+            cacheTerrain() {
+                this.terrainCanvas.width = width;
+                this.terrainCanvas.height = height;
+                this.terrainCtx.fillStyle = '#1a1f13';
+                this.terrainCtx.fillRect(0, 0, width, height);
+                for (let i = 0; i < 4000; i++) {
+                    this.terrainCtx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.05)';
+                    this.terrainCtx.fillRect(Math.random() * width, Math.random() * height, Math.random() * 4, Math.random() * 4);
+                }
+                
+                // Territory Zones
+                this.terrainCtx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
+                this.terrainCtx.fillRect(0, 0, width/2 - 50, height);
+                
+                this.terrainCtx.fillStyle = 'rgba(250, 204, 21, 0.08)'; 
+                this.terrainCtx.fillRect(width/2 + 50, 0, width/2, height);
+            }
+
+            aiPrepBase() {
+                if (isMultiplayer) return; // AI doesn't run in MP
+                while(this.money.enemy >= 60) {
+                    const affordableBlds = Object.keys(BUILDINGS).filter(k => BUILDINGS[k].cost <= this.money.enemy);
+                    if (affordableBlds.length === 0) break;
+                    let type = affordableBlds[Math.floor(Math.random() * affordableBlds.length)];
+                    this.money.enemy -= BUILDINGS[type].cost;
+                    let bx = type === 'artillery' ? this.enemyHQ.x - 200 + Math.random()*120 : this.enemyHQ.x - 350 + Math.random()*180;
+                    let by = 80 + Math.random() * (height - 160);
+                    this.buildings.push(new Building(type, 'enemy', bx, by));
+                }
+                while(this.money.enemy >= 15) {
+                    const affordableUnits = Object.keys(UNITS).filter(k => UNITS[k].cost <= this.money.enemy);
+                    if (affordableUnits.length === 0) break;
+                    let type = affordableUnits[Math.floor(Math.random() * affordableUnits.length)];
+                    this.money.enemy -= UNITS[type].cost;
+                    let ux = this.enemyHQ.x - 100 + Math.random()*80;
+                    let uy = this.enemyHQ.y - 120 + Math.random()*240;
+                    this.units.push(new Unit(type, 'enemy', ux, uy));
+                }
+            }
+
+            bindEvents() {
+                const box = document.getElementById('selection-box');
+
+                canvas.addEventListener('mousedown', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+
+                    // Right Click: Move/Attack Command
+                    if (e.button === 2) {
+                        e.preventDefault();
+                        if (this.state !== 'PLAYING') return; 
+                        if (this.buildMode) {
+                            this.buildMode = null;
+                            this.buildType = null;
+                            return;
+                        }
+                        if (this.selectedUnits.length > 0) {
+                            let targetEnemy = null;
+                            const targetTeam = localRole === 'player' ? 'enemy' : 'player';
+                            
+                            const checkEntity = (ent) => {
+                                if (ent.team === targetTeam && !ent.dead && Utils.dist(mouseX, mouseY, ent.x, ent.y) < (ent.data?.radius || 20)) {
+                                    targetEnemy = ent;
+                                }
+                            };
+                            this.units.forEach(checkEntity);
+                            this.buildings.forEach(checkEntity);
+                            
+                            const enemyHQ = localRole === 'player' ? this.enemyHQ : this.playerHQ;
+                            if (Utils.dist(mouseX, mouseY, enemyHQ.x, enemyHQ.y) < 40) targetEnemy = enemyHQ;
+
+                            const uIds = [];
+                            this.selectedUnits.forEach(u => {
+                                uIds.push(u.id);
+                                if (targetEnemy) {
+                                    u.target = targetEnemy;
+                                    u.state = 'chasing';
+                                    u.destX = null;
+                                } else {
+                                    u.destX = mouseX + (Math.random() - 0.5) * 40;
+                                    u.destY = mouseY + (Math.random() - 0.5) * 40;
+                                    u.state = 'moving';
+                                    u.target = null;
+                                }
+                            });
+
+                            if (isMultiplayer) {
+                                socket.emit('unit_command', {
+                                    unitIds: uIds,
+                                    targetId: targetEnemy ? targetEnemy.id : null,
+                                    destX: mouseX,
+                                    destY: mouseY
+                                });
+                            }
+
+                            this.createExplosion(mouseX, mouseY, localRole === 'player' ? '#4ade80' : '#fde047', 5, 2);
+                        }
+                        return;
+                    }
+
+                    // Left Click: Build or Select
+                    if (e.button === 0) {
+                        if (this.buildMode) {
+                            let cost = this.buildMode === 'unit' ? UNITS[this.buildType].cost : BUILDINGS[this.buildType].cost;
+                            
+                            // Check valid side deployment
+                            let validX = localRole === 'player' 
+                                ? (this.buildMode === 'unit' ? mouseX < width/2 - 20 : mouseX < width/2 - 80)
+                                : (this.buildMode === 'unit' ? mouseX > width/2 + 20 : mouseX > width/2 + 80);
+
+                            if (this.money[localRole] >= cost && validX) {
+                                this.money[localRole] -= cost;
+                                const uid = `${localRole}_${Date.now()}_${Math.random()}`;
+
+                                if (this.buildMode === 'unit') {
+                                    const u = new Unit(this.buildType, localRole, mouseX, mouseY, uid);
+                                    this.units.push(u);
+                                    if (isMultiplayer) socket.emit('spawn_unit', { type: this.buildType, team: localRole, x: mouseX, y: mouseY, id: uid });
+                                } else {
+                                    const b = new Building(this.buildType, localRole, mouseX, mouseY, uid);
+                                    this.buildings.push(b);
+                                    if (isMultiplayer) socket.emit('build_structure', { type: this.buildType, team: localRole, x: mouseX, y: mouseY, id: uid });
+                                }
+                                this.updateUI();
+                            }
+                            return; 
+                        }
+
+                        this.mouse.isDown = true;
+                        this.mouse.startX = mouseX;
+                        this.mouse.startY = mouseY;
+                        this.mouse.x = mouseX;
+                        this.mouse.y = mouseY;
+
+                        box.style.left = (rect.left + mouseX) + 'px';
+                        box.style.top = (rect.top + mouseY) + 'px';
+                        box.style.width = '0px';
+                        box.style.height = '0px';
+                        box.classList.remove('hidden');
+                    }
+                });
+
+                canvas.addEventListener('mousemove', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    this.mouse.x = e.clientX - rect.left;
+                    this.mouse.y = e.clientY - rect.top;
+
+                    if (this.mouse.isDown) {
+                        let x = Math.min(this.mouse.x, this.mouse.startX);
+                        let y = Math.min(this.mouse.y, this.mouse.startY);
+                        let w = Math.abs(this.mouse.x - this.mouse.startX);
+                        let h = Math.abs(this.mouse.y - this.mouse.startY);
+
+                        box.style.left = (rect.left + x) + 'px';
+                        box.style.top = (rect.top + y) + 'px';
+                        box.style.width = w + 'px';
+                        box.style.height = h + 'px';
+                    }
+                });
+
+                canvas.addEventListener('mouseup', (e) => {
+                    if (e.button === 0 && this.mouse.isDown) {
+                        this.mouse.isDown = false;
+                        box.classList.add('hidden');
+                        
+                        let sx = Math.min(this.mouse.x, this.mouse.startX);
+                        let sy = Math.min(this.mouse.y, this.mouse.startY);
+                        let sw = Math.abs(this.mouse.x - this.mouse.startX);
+                        let sh = Math.abs(this.mouse.y - this.mouse.startY);
+
+                        if (sw < 5 && sh < 5) { sx -= 10; sy -= 10; sw = 20; sh = 20; }
+
+                        this.selectedUnits = [];
+                        this.units.forEach(u => {
+                            if (u.team === localRole && !u.dead) {
+                                if (u.x > sx && u.x < sx + sw && u.y > sy && u.y < sy + sh) {
+                                    this.selectedUnits.push(u);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+                document.getElementById('start-btn').addEventListener('click', () => {
+                    if (isMultiplayer) {
+                        localReady = true;
+                        document.getElementById('prep-title').innerText = "Awaiting Opponent";
+                        document.getElementById('prep-desc').innerText = "Your base is set. Waiting for opponent to ready up.";
+                        document.getElementById('start-btn').classList.add('hidden');
+                        socket.emit('start_battle', { team: localRole });
+                        if (opponentReady) this.startMatch();
+                    } else {
+                        this.startMatch();
+                    }
+                });
+
+                document.getElementById('supply-btn').addEventListener('click', () => {
+                    if (this.supplyCooldown[localRole] <= 0 && this.state === 'PLAYING') {
+                        this.addMoney(localRole, 2000);
+                        this.supplyCooldown[localRole] = this.supplyMax;
+                        const hq = localRole === 'player' ? this.playerHQ : this.enemyHQ;
+                        this.createExplosion(hq.x, hq.y, '#4ade80', 30);
+
+                        if (isMultiplayer) socket.emit('supply_drop', { team: localRole });
+                    }
+                });
+            }
+
+            startMatch() {
+                this.state = 'PLAYING';
+                document.getElementById('prep-banner').classList.add('hidden');
+            }
+
+            initUI() {
+                const uDiv = document.getElementById('build-units');
+                const bDiv = document.getElementById('build-defenses');
+                uDiv.innerHTML = '';
+                bDiv.innerHTML = '';
+                
+                const createBtn = (type, data, isBuilding) => {
+                    let btn = document.createElement('button');
+                    btn.className = `flex-shrink-0 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-1.5 text-left w-28 transition text-xs`;
+                    btn.innerHTML = `
+                        <div class="font-bold text-white leading-tight">${data.name}</div>
+                        <div class="text-green-400 font-mono text-[11px] mb-0.5">$${data.cost}</div>
+                        <div class="text-[9px] text-gray-400 leading-tight">${data.desc}</div>
+                    `;
+                    btn.onclick = () => {
+                        this.buildMode = isBuilding ? 'building' : 'unit';
+                        this.buildType = type;
+                        this.selectedUnits = []; 
+                    };
+                    return btn;
+                };
+
+                Object.keys(UNITS).forEach(k => uDiv.appendChild(createBtn(k, UNITS[k], false)));
+                Object.keys(BUILDINGS).forEach(k => bDiv.appendChild(createBtn(k, BUILDINGS[k], true)));
+            }
+
+            addMoney(team, amt) {
+                this.money[team] += amt;
+                this.updateUI();
+            }
+
+            updateUI() {
+                document.getElementById('player-money').innerText = Math.floor(this.money[localRole]);
+                document.getElementById('player-hp').innerText = Math.floor(Math.max(0, localRole === 'player' ? this.playerHQ.hp : this.enemyHQ.hp));
+                document.getElementById('enemy-hp').innerText = Math.floor(Math.max(0, localRole === 'player' ? this.enemyHQ.hp : this.playerHQ.hp));
+
+                const sBtn = document.getElementById('supply-btn');
+                const sTime = document.getElementById('supply-time');
+                if (this.supplyCooldown[localRole] > 0) {
+                    sBtn.disabled = true;
+                    sTime.innerText = `WAIT ${Math.ceil(this.supplyCooldown[localRole] / 60)}s`;
+                } else {
+                    sBtn.disabled = false;
+                    sTime.innerText = `READY ($2000)`;
+                }
+            }
+
+            update() {
+                if (this.state === 'GAMEOVER') return;
+                this.frameCount++;
+
+                if (this.state === 'PLAYING') {
+                    // Passive Income
+                    if (this.frameCount % 60 === 0) {
+                        this.addMoney('player', 2.5);
+                        this.addMoney('enemy', 2.5);
+                    }
+
+                    if (this.supplyCooldown.player > 0) this.supplyCooldown.player--;
+                    if (this.supplyCooldown.enemy > 0) this.supplyCooldown.enemy--;
+                    if (this.frameCount % 10 === 0) this.updateUI();
+
+                    // Single Player AI Logic
+                    if (!isMultiplayer) {
+                        if (this.supplyCooldown.enemy <= 0) {
+                            this.addMoney('enemy', 2000);
+                            this.supplyCooldown.enemy = this.supplyMax;
+                            this.createExplosion(this.enemyHQ.x, this.enemyHQ.y, '#fef08a', 30);
+                        }
+
+                        if (this.money.enemy > 600 && Math.random() < 0.02) {
+                            let spawned = 0;
+                            while (this.money.enemy >= 15 && spawned < 12) {
+                                const affordable = Object.keys(UNITS).filter(k => UNITS[k].cost <= this.money.enemy);
+                                if (affordable.length > 0) {
+                                    let type = affordable[Math.floor(Math.random() * affordable.length)];
+                                    this.money.enemy -= UNITS[type].cost;
+                                    let u = new Unit(type, 'enemy', this.enemyHQ.x - 100 + Math.random()*80, this.enemyHQ.y - 120 + Math.random()*240);
+                                    this.units.push(u);
+                                    spawned++;
+                                } else break;
+                            }
+                        }
+
+                        if (this.money.enemy > 200 && Math.random() < 0.01) {
+                            const affordableBlds = Object.keys(BUILDINGS).filter(k => BUILDINGS[k].cost <= this.money.enemy);
+                            if (affordableBlds.length > 0) {
+                                let type = affordableBlds[Math.floor(Math.random() * affordableBlds.length)];
+                                this.money.enemy -= BUILDINGS[type].cost;
+                                let bx = type === 'artillery' ? this.enemyHQ.x - 200 + Math.random()*120 : this.enemyHQ.x - 350 + Math.random()*180;
+                                let by = 80 + Math.random() * (height - 160);
+                                this.buildings.push(new Building(type, 'enemy', bx, by));
+                            }
+                        }
+                    }
+                }
+
+                // Entity Updates
+                this.playerHQ.update(this);
+                this.enemyHQ.update(this);
+
+                for (let i = this.units.length - 1; i >= 0; i--) {
+                    let u = this.units[i];
+                    u.update(this);
+                    if (u.dead) this.units.splice(i, 1);
+                }
+
+                for (let i = this.buildings.length - 1; i >= 0; i--) {
+                    let b = this.buildings[i];
+                    b.update(this);
+                    if (b.dead) this.buildings.splice(i, 1);
+                }
+
+                for (let i = this.bullets.length - 1; i >= 0; i--) {
+                    let b = this.bullets[i];
+                    b.update(this);
+                    if (b.dead) this.bullets.splice(i, 1);
+                }
+
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    let p = this.particles[i];
+                    p.update();
+                    if (p.dead) this.particles.splice(i, 1);
+                }
+
+                if (this.playerHQ.hp <= 0 && this.state !== 'GAMEOVER') this.endGame('enemy');
+                if (this.enemyHQ.hp <= 0 && this.state !== 'GAMEOVER') this.endGame('player');
+            }
+
+            endGame(winningTeam) {
+                this.state = 'GAMEOVER';
+                document.getElementById('info-overlay').classList.remove('hidden');
+                const playerWon = winningTeam === localRole;
+                document.getElementById('info-title').innerText = playerWon ? "VICTORY" : "DEFEAT";
+                document.getElementById('info-title').className = `text-4xl font-black mb-4 ${playerWon ? 'text-green-400' : 'text-red-500'}`;
+                document.getElementById('info-desc').innerText = playerWon ? "You completely demolished the enemy headquarters!" : "Your base was destroyed by the enemy.";
+            }
+
+            calcDamage(damage, weapon, armor) {
+                if (weapon === 'light' && armor === 'heavy') return 0; // Bullets bounce off tanks
+                if (weapon === 'heavy' && armor === 'heavy') return damage * 2; // AT guns shred tanks
+                if (weapon === 'explosive' && armor === 'heavy') return damage * 0.5; 
+                return damage;
+            }
+
+            fireBullet(source, targetX, targetY) {
+                let d = source.data || source; 
+                let w = d.weapon || 'medium';
+                let dmg = d.damage || 10;
+                let spl = typeof d.splash !== 'undefined' ? d.splash : 0; 
+                let spd = w === 'explosive' ? 3 : (w === 'heavy' ? 8 : 12);
+                let col = w === 'explosive' ? '#fb923c' : (w === 'heavy' ? '#fde047' : '#e5e7eb');
+                
+                let tx = targetX;
+                let ty = targetY;
+                
+                if (w === 'explosive') {
+                    tx += (Math.random() - 0.5) * 80;
+                    ty += (Math.random() - 0.5) * 80;
+                }
+
+                this.bullets.push(new Bullet(source.x, source.y, tx, ty, spd, dmg, col, spl, w, source.team));
+            }
+
+            createExplosion(x, y, color, count, size = 3) {
+                for(let i=0; i<count; i++) {
+                    this.particles.push(new Particle(x, y, color, size));
+                }
+            }
+
+            draw() {
+                ctx.drawImage(this.terrainCanvas, 0, 0);
+
+                if (this.state === 'PREP') {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+                    if (localRole === 'player') {
+                        ctx.fillRect(width/2, 0, width/2, height);
+                    } else {
+                        ctx.fillRect(0, 0, width/2, height);
+                    }
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 10]);
+                    ctx.beginPath();
+                    ctx.moveTo(width/2, 0);
+                    ctx.lineTo(width/2, height);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                this.buildings.forEach(b => {
+                    if (this.state === 'PREP' && b.team !== localRole) return; 
+                    b.draw(ctx);
+                });
+                
+                this.units.forEach(u => {
+                    if (this.state === 'PREP' && u.team !== localRole) return;
+                    u.draw(ctx);
+                });
+                
+                this.playerHQ.draw(ctx);
+                this.enemyHQ.draw(ctx);
+
+                this.bullets.forEach(b => b.draw(ctx));
+                this.particles.forEach(p => p.draw(ctx));
+
+                this.selectedUnits.forEach(u => {
+                    ctx.strokeStyle = localRole === 'player' ? '#4ade80' : '#fde047';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(u.x, u.y, (u.data?.radius || 12) + 4, 0, Math.PI * 2);
+                    ctx.stroke();
+                });
+
+                if (this.buildMode) {
+                    ctx.globalAlpha = 0.5;
+                    let color = this.buildMode === 'unit' ? '#4ade80' : '#3b82f6';
+                    let r = this.buildMode === 'unit' ? 12 : BUILDINGS[this.buildType].radius;
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(this.mouse.x, this.mouse.y, r, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    let range = this.buildMode === 'unit' ? UNITS[this.buildType].range : BUILDINGS[this.buildType].range;
+                    if (range > 0) {
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.arc(this.mouse.x, this.mouse.y, range, 0, Math.PI*2);
+                        ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+
+            loop() {
+                this.update();
+                this.draw();
+                requestAnimationFrame(() => this.loop());
+            }
+        }
+
+        class HQ {
+            constructor(team, x, y) {
+                this.team = team;
+                this.x = x;
+                this.y = y;
+                this.maxHp = 5000;
+                this.hp = this.maxHp;
+                this.radius = 40;
+                this.color = team === 'player' ? '#166534' : '#854d0e';
+                
+                this.weapon = 'medium';
+                this.damage = 25;
+                this.range = 180;
+                this.cooldownTimer = 0;
+                this.maxCooldown = 30;
+                this.splash = 0; 
+            }
+
+            update(game) {
+                if (this.hp <= 0 || game.state === 'PREP') return;
+
+                if (this.cooldownTimer > 0) this.cooldownTimer--;
+
+                if (this.cooldownTimer <= 0) {
+                    let closest = null;
+                    let minDist = this.range;
+                    let check = (e) => {
+                        if (e.team !== this.team && !e.dead) {
+                            let d = Utils.dist(this.x, this.y, e.x, e.y);
+                            if (d < minDist) { minDist = d; closest = e; }
+                        }
+                    };
+                    game.units.forEach(check);
+                    game.buildings.forEach(check);
+
+                    if (closest) {
+                        game.fireBullet(this, closest.x, closest.y);
+                        this.cooldownTimer = this.maxCooldown;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                if (this.hp <= 0) return;
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.rect(this.x - this.radius, this.y - this.radius, this.radius*2, this.radius*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 15, 0, Math.PI*2);
+                ctx.fill();
+
+                let hpPct = this.hp / this.maxHp;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(this.x - 30, this.y - 50, 60, 6);
+                ctx.fillStyle = '#4ade80';
+                ctx.fillRect(this.x - 30, this.y - 50, 60 * hpPct, 6);
+            }
+        }
+
+        class Unit {
+            constructor(type, team, x, y, id = null) {
+                this.id = id || `${team}_${Date.now()}_${Math.random()}`;
+                this.type = type;
+                this.team = team;
+                this.x = x;
+                this.y = y;
+                this.data = UNITS[type];
+                this.hp = this.data.hp;
+                this.maxHp = this.data.hp;
+                this.dead = false;
+                
+                this.state = 'idle'; 
+                this.target = null;
+                this.destX = null;
+                this.destY = null;
+                this.cooldownTimer = 0;
+                
+                this.radius = type === 'tank' ? 16 : 8;
+                this.color = team === 'player' ? '#22c55e' : '#eab308'; 
+            }
+
+            update(game) {
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    game.createExplosion(this.x, this.y, this.team === 'player' ? '#22c55e' : '#eab308', this.type === 'tank' ? 20 : 5);
+                    return;
+                }
+
+                if (this.cooldownTimer > 0) this.cooldownTimer--;
+
+                if (game.state === 'PREP') return;
+
+                if (this.state === 'idle' || !this.target || this.target.dead) {
+                    let closest = null;
+                    let minDist = Infinity;
+                    let check = (e) => {
+                        if (e.team !== this.team && !e.dead) {
+                            let d = Utils.dist(this.x, this.y, e.x, e.y);
+                            if (d < minDist) { minDist = d; closest = e; }
+                        }
+                    };
+                    game.buildings.forEach(check);
+                    game.units.forEach(check);
+                    
+                    if (closest) {
+                        this.target = closest;
+                        if (!isMultiplayer && this.team === 'enemy') this.state = 'chasing';
+                    } else if (!isMultiplayer && this.team === 'enemy') {
+                        this.target = game.playerHQ;
+                        this.state = 'chasing';
+                    }
+                }
+
+                game.units.forEach(other => {
+                    if (other !== this && !other.dead) {
+                        let d = Utils.dist(this.x, this.y, other.x, other.y);
+                        let minDist = this.radius + other.radius + 2;
+                        if (d < minDist && d > 0) {
+                            let overlap = minDist - d;
+                            let dx = (this.x - other.x) / d;
+                            let dy = (this.y - other.y) / d;
+                            this.x += dx * overlap * 0.1;
+                            this.y += dy * overlap * 0.1;
+                        }
+                    }
+                });
+
+                if (this.state === 'moving' && this.destX !== null) {
+                    let d = Utils.dist(this.x, this.y, this.destX, this.destY);
+                    if (d < 5) {
+                        this.state = 'idle';
+                        this.destX = null;
+                    } else {
+                        this.x += ((this.destX - this.x) / d) * this.data.speed;
+                        this.y += ((this.destY - this.y) / d) * this.data.speed;
+                    }
+                    if (this.target && Utils.dist(this.x, this.y, this.target.x, this.target.y) <= this.data.range && this.cooldownTimer <= 0) {
+                        game.fireBullet(this, this.target.x, this.target.y);
+                        this.cooldownTimer = this.data.cooldown;
+                    }
+
+                } else if (this.state === 'chasing' && this.target) {
+                    let d = Utils.dist(this.x, this.y, this.target.x, this.target.y);
+                    let atkRange = this.data.range;
+                    
+                    if (d > atkRange - 10) {
+                        this.x += ((this.target.x - this.x) / d) * this.data.speed;
+                        this.y += ((this.target.y - this.y) / d) * this.data.speed;
+                    } else {
+                        if (this.cooldownTimer <= 0) {
+                            game.fireBullet(this, this.target.x, this.target.y);
+                            this.cooldownTimer = this.data.cooldown;
+                        }
+                    }
+                } else if (this.state === 'idle' && this.target) {
+                    let d = Utils.dist(this.x, this.y, this.target.x, this.target.y);
+                    if (d <= this.data.range && this.cooldownTimer <= 0) {
+                        game.fireBullet(this, this.target.x, this.target.y);
+                        this.cooldownTimer = this.data.cooldown;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                if (this.target && this.state !== 'moving') {
+                    ctx.rotate(Math.atan2(this.target.y - this.y, this.target.x - this.x));
+                } else if (this.state === 'moving' && this.destX !== null) {
+                    ctx.rotate(Math.atan2(this.destY - this.y, this.destX - this.x));
+                }
+
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 4;
+                ctx.fillStyle = this.color;
+
+                if (this.type === 'tank') {
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-12, -18, 24, 8);
+                    ctx.fillRect(-12, 10, 24, 8);
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(-16, -12, 32, 24);
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -3, 24, 6);
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 10, 0, Math.PI*2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#444';
+                    let gLen = this.type === 'at' ? 18 : 12;
+                    let gWid = this.type === 'at' ? 4 : 2;
+                    ctx.fillRect(4, -gWid/2, gLen, gWid);
+                }
+
+                ctx.restore();
+
+                if (this.hp < this.maxHp) {
+                    ctx.fillStyle = 'rgba(255,0,0,0.8)';
+                    ctx.fillRect(this.x - 10, this.y - this.radius - 8, 20, 4);
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fillRect(this.x - 10, this.y - this.radius - 8, 20 * (this.hp / this.maxHp), 4);
+                }
+            }
+        }
+
+        class Building {
+            constructor(type, team, x, y, id = null) {
+                this.id = id || `${team}_${Date.now()}_${Math.random()}`;
+                this.type = type;
+                this.team = team;
+                this.x = x;
+                this.y = y;
+                this.data = BUILDINGS[type];
+                this.hp = this.data.hp;
+                this.maxHp = this.data.hp;
+                this.dead = false;
+                this.cooldownTimer = 0;
+                this.radius = this.data.radius;
+                this.target = null;
+                this.color = team === 'player' ? '#14532d' : '#713f12'; 
+            }
+
+            update(game) {
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    game.createExplosion(this.x, this.y, '#9ca3af', 15);
+                    return;
+                }
+                
+                if (game.state === 'PREP') return;
+                if (this.cooldownTimer > 0) this.cooldownTimer--;
+
+                if (this.data.weapon === 'none') return;
+
+                if (!this.target || this.target.dead || Utils.dist(this.x, this.y, this.target.x, this.target.y) > this.data.range) {
+                    let closest = null;
+                    let minDist = this.data.range;
+                    let check = (e) => {
+                        if (e.team !== this.team && !e.dead) {
+                            let d = Utils.dist(this.x, this.y, e.x, e.y);
+                            if (d < minDist) { minDist = d; closest = e; }
+                        }
+                    };
+                    game.units.forEach(check);
+                    game.buildings.forEach(check);
+                    
+                    let hq = this.team === 'player' ? game.enemyHQ : game.playerHQ;
+                    if (Utils.dist(this.x, this.y, hq.x, hq.y) < minDist) {
+                        closest = hq;
+                    }
+
+                    this.target = closest;
+                }
+
+                if (this.target && this.cooldownTimer <= 0) {
+                    game.fireBullet(this, this.target.x, this.target.y);
+                    this.cooldownTimer = this.data.cooldown;
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                let angle = 0;
+                if (this.target) {
+                    angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                }
+
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 6;
+
+                ctx.fillStyle = '#4b5563'; 
+                ctx.beginPath();
+                if (this.type === 'barricade') {
+                    ctx.rect(-20, -10, 40, 20);
+                } else {
+                    ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+                }
+                ctx.fill();
+
+                ctx.rotate(angle);
+                ctx.fillStyle = this.color;
+                
+                if (this.type === 'pillbox') {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 10, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(8, -2, 12, 4);
+                } else if (this.type === 'at_gun') {
+                    ctx.fillRect(-5, -12, 10, 24);
+                    ctx.fillStyle = '#111';
+                    ctx.fillRect(0, -3, 25, 6);
+                } else if (this.type === 'artillery') {
+                    ctx.fillRect(-12, -12, 24, 24);
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(0, -5, 35, 10);
+                }
+
+                ctx.restore();
+
+                if (this.hp < this.maxHp) {
+                    ctx.fillStyle = 'rgba(255,0,0,0.8)';
+                    ctx.fillRect(this.x - 15, this.y - this.radius - 8, 30, 4);
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fillRect(this.x - 15, this.y - this.radius - 8, 30 * (this.hp / this.maxHp), 4);
+                }
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, tx, ty, speed, damage, color, splash, weapon, team) {
+                this.x = x;
+                this.y = y;
+                this.tx = tx;
+                this.ty = ty;
+                this.speed = speed;
+                this.damage = damage;
+                this.color = color;
+                this.splash = splash;
+                this.weapon = weapon;
+                this.team = team;
+                this.dead = false;
+
+                let d = Utils.dist(x, y, tx, ty);
+                this.vx = ((tx - x) / d) * speed;
+                this.vy = ((ty - y) / d) * speed;
+            }
+
+            update(game) {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.splash > 0 && Utils.dist(this.x, this.y, this.tx, this.ty) < this.speed) {
+                    this.dead = true;
+                    game.createExplosion(this.tx, this.ty, '#fb923c', 15, 4);
+                    let applySplash = (e) => {
+                        if (e.team !== this.team && !e.dead && Utils.dist(this.tx, this.ty, e.x, e.y) < this.splash) {
+                            e.hp -= game.calcDamage(this.damage, this.weapon, e.data?.armor || 'medium');
+                        }
+                    };
+                    game.units.forEach(applySplash);
+                    game.buildings.forEach(applySplash);
+                    if (Utils.dist(this.tx, this.ty, game.playerHQ.x, game.playerHQ.y) < this.splash && this.team === 'enemy') game.playerHQ.hp -= this.damage;
+                    if (Utils.dist(this.tx, this.ty, game.enemyHQ.x, game.enemyHQ.y) < this.splash && this.team === 'player') game.enemyHQ.hp -= this.damage;
+                    return;
+                }
+
+                if (this.splash === 0) {
+                    let hit = false;
+                    let checkHit = (e) => {
+                        if (!hit && e.team !== this.team && !e.dead && Utils.dist(this.x, this.y, e.x, e.y) < (e.data?.radius || e.radius || 10)) {
+                            e.hp -= game.calcDamage(this.damage, this.weapon, e.data?.armor || 'medium');
+                            hit = true;
+                        }
+                    };
+                    
+                    game.units.forEach(checkHit);
+                    if(!hit) game.buildings.forEach(checkHit);
+                    
+                    if (!hit && this.team === 'enemy' && Utils.dist(this.x, this.y, game.playerHQ.x, game.playerHQ.y) < 40) {
+                        game.playerHQ.hp -= this.damage;
+                        hit = true;
+                    }
+                    if (!hit && this.team === 'player' && Utils.dist(this.x, this.y, game.enemyHQ.x, game.enemyHQ.y) < 40) {
+                        game.enemyHQ.hp -= this.damage;
+                        hit = true;
+                    }
+
+                    if (hit) {
+                        this.dead = true;
+                        game.createExplosion(this.x, this.y, '#fde047', 3, 1.5);
+                    }
+                }
+
+                if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) this.dead = true;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.weapon === 'explosive' ? 4 : 2, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color, size) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = size * Math.random() + 1;
+                let angle = Math.random() * Math.PI * 2;
+                let speed = Math.random() * 3 + 1;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.05 + 0.02;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+                this.dead = this.life <= 0;
+            }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        const game = new Game();
+
+        document.getElementById('find-match-btn').addEventListener('click', () => {
+            const username = document.getElementById('username-input').value.trim() || 'Commander';
+            document.getElementById('lobby-status').innerText = 'Searching for an opponent...';
+            document.getElementById('lobby-status').classList.remove('hidden');
+
+            if (!socket) {
+                socket = io();
+
+                socket.on('waiting_for_opponent', (data) => {
+                    document.getElementById('lobby-status').innerText = data.message;
+                });
+
+                socket.on('match_found', (data) => {
+                    isMultiplayer = true;
+                    localRole = data.team;
+                    document.getElementById('lobby-modal').classList.add('hidden');
+                    
+                    game.state = 'PREP';
+                    game.addMoney(localRole, 0); // Refresh UI
+                    
+                    document.getElementById('prep-title').innerText = `Online Match vs ${data.opponentName}`;
+                    document.getElementById('prep-desc').innerText = `You are commanding Team ${localRole === 'player' ? 'Green (Left)' : 'Yellow (Right)'}`;
+                });
+
+                socket.on('opponent_start_battle', () => {
+                    opponentReady = true;
+                    if (localReady) game.startMatch();
+                });
+
+                socket.on('opponent_spawn_unit', (data) => {
+                    game.units.push(new Unit(data.type, data.team, data.x, data.y, data.id));
+                });
+
+                socket.on('opponent_build_structure', (data) => {
+                    game.buildings.push(new Building(data.type, data.team, data.x, data.y, data.id));
+                });
+
+                socket.on('opponent_unit_command', (data) => {
+                    let target = null;
+                    if (data.targetId) {
+                        target = game.units.find(u => u.id === data.targetId) || game.buildings.find(b => b.id === data.targetId);
+                        if (!target && data.targetId.includes('HQ')) target = localRole === 'player' ? game.playerHQ : game.enemyHQ;
+                    }
+
+                    data.unitIds.forEach(id => {
+                        const u = game.units.find(unit => unit.id === id);
+                        if (u) {
+                            if (target) {
+                                u.target = target;
+                                u.state = 'chasing';
+                                u.destX = null;
+                            } else {
+                                u.destX = data.destX;
+                                u.destY = data.destY;
+                                u.state = 'moving';
+                                u.target = null;
+                            }
+                        }
+                    });
+                });
+
+                socket.on('opponent_supply_drop', (data) => {
+                    game.addMoney(data.team, 2000);
+                    const hq = data.team === 'player' ? game.playerHQ : game.enemyHQ;
+                    game.createExplosion(hq.x, hq.y, '#4ade80', 30);
+                });
+
+                socket.on('opponent_disconnected', (data) => {
+                    game.endGame(localRole);
+                });
+            }
+
+            socket.emit('find_match', { username });
+        });
+
+        document.getElementById('vs-ai-btn').addEventListener('click', () => {
+            isMultiplayer = false;
+            localRole = 'player';
+            document.getElementById('lobby-modal').classList.add('hidden');
+            game.state = 'PREP';
+            game.aiPrepBase();
+        });
+
+        game.loop();
+    </script>
+</body>
+</html>
