@@ -12,7 +12,6 @@ const io = new Server(server, {
     }
 });
 
-// Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res) => {
@@ -23,7 +22,7 @@ let waitingPlayer = null;
 let roomCounter = 1;
 
 io.on('connection', (socket) => {
-    console.log(`Player connected: ${socket.id}`);
+    console.log(`Commander connected: ${socket.id}`);
 
     // Matchmaking request
     socket.on('find_match', (data) => {
@@ -58,11 +57,11 @@ io.on('connection', (socket) => {
             });
 
             waitingPlayer = null;
-            console.log(`Match started in ${roomId}: ${player1.username} vs ${player2.username}`);
+            console.log(`Battle started in ${roomId}: ${player1.username} vs ${player2.username}`);
         } else {
             // Place in waiting queue
             waitingPlayer = socket;
-            socket.emit('waiting_for_opponent', { message: 'Searching for an opponent...' });
+            socket.emit('waiting_for_opponent', { message: 'Searching for an enemy Commander...' });
         }
     });
 
@@ -97,19 +96,19 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
+        console.log(`Commander disconnected: ${socket.id}`);
         if (waitingPlayer && waitingPlayer.id === socket.id) {
             waitingPlayer = null;
         }
         if (socket.roomId) {
             socket.to(socket.roomId).emit('opponent_disconnected', {
-                message: 'Your opponent has surrendered/disconnected!'
+                message: 'Your opponent has surrendered or lost connection!'
             });
         }
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     console.log(`Toy Soldier RTS Server running on port ${PORT}`);
 });
