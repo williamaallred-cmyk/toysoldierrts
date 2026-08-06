@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toy Soldier RTS - Multiplayer Edition</title>
+    <title>Toy Soldier RTS - Expanded Campaign</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; overflow: hidden; background: #090d16; user-select: none; }
-        .selection-box { position: absolute; border: 1px solid rgba(134, 239, 172, 0.8); background: rgba(134, 239, 172, 0.2); pointer-events: none; z-index: 10; }
+        .selection-box { position: absolute; border: 1px solid rgba(134, 239, 172, 0.8); background: rgba(134, 239, 172, 0.2); pointer-events: none; z-index: 20; }
         .ui-panel { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
         
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { height: 6px; width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
@@ -20,75 +19,86 @@
 </head>
 <body class="text-white h-screen w-screen flex flex-col overflow-hidden">
 
-    <!-- -->
     <header id="top-bar" class="ui-panel flex-none p-3 z-30 flex justify-between items-center shadow-lg border-b border-gray-800">
-        <!-- Player Stats -->
+        <!-- Player Economy Stats -->
         <div class="flex gap-4 items-center">
             <div>
                 <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">War Funds</p>
                 <p class="text-xl font-black text-green-400 font-mono">$<span id="player-money">1000</span></p>
             </div>
             <div class="border-l border-gray-700 pl-4">
-                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Base Integrity</p>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Income Rate</p>
+                <p class="text-sm font-bold text-green-300 font-mono"><span id="income-rate">+$15/5s</span></p>
+            </div>
+            <div class="border-l border-gray-700 pl-4">
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">HQ Integrity</p>
                 <p class="text-xl font-black text-blue-400 font-mono"><span id="player-hp">5000</span></p>
             </div>
             <div class="border-l border-gray-700 pl-4">
-                <button id="supply-btn" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-1 px-3 rounded text-xs transition flex flex-col items-center">
+                <button id="supply-btn" class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-1 px-3 rounded text-xs transition flex flex-col items-center shadow-md">
                     <span>Supply Drop</span>
                     <span id="supply-time" class="text-[10px] font-mono">READY ($2000)</span>
                 </button>
             </div>
         </div>
 
-        <!-- Deployment / Status Banner -->
-        <div id="prep-banner" class="text-center px-4 py-1 rounded border border-yellow-500/50 bg-yellow-500/10">
-            <h1 class="text-sm font-black text-yellow-400 uppercase tracking-widest" id="prep-title">Deployment Phase</h1>
-            <p class="text-[11px] text-gray-300" id="prep-desc">Deploy forces. Enemy side is obscured.</p>
-            <button id="start-btn" class="mt-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs px-4 py-1 rounded shadow transition">
+        <!-- Phase Banner -->
+        <div id="prep-banner" class="text-center px-4 py-1.5 rounded border border-yellow-500/50 bg-yellow-500/10">
+            <h1 class="text-xs font-black text-yellow-400 uppercase tracking-widest" id="prep-title">Deployment Phase</h1>
+            <p class="text-[10px] text-gray-300" id="prep-desc">Build facilities & deploy forces. Enemy area is obscured.</p>
+            <button id="start-btn" class="mt-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs px-4 py-1 rounded shadow transition uppercase">
                 START BATTLE
             </button>
         </div>
 
-        <!-- Enemy Stats & Intel -->
+        <!-- Navigation Controls & Enemy Intel -->
         <div class="flex gap-4 items-center text-right">
-            <div class="flex flex-col gap-0.5 items-end">
-                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Enemy Intel</p>
-                <div class="flex items-center gap-1.5 text-[10px]"><div class="w-2.5 h-2.5 rounded-full bg-[#eab308]"></div> Light Armor</div>
-                <div class="flex items-center gap-1.5 text-[10px]"><div class="w-2.5 h-2.5 bg-[#eab308]"></div> Heavy Armor</div>
+            <div class="hidden md:flex flex-col gap-0.5 items-end text-[10px] text-gray-400 font-mono">
+                <div><span class="text-yellow-400 font-bold">Pan Map:</span> Drag Right-Click / WASD</div>
+                <div><span class="text-green-400 font-bold">Select:</span> Drag Left-Click</div>
+                <div><span class="text-blue-400 font-bold">Move/Attack:</span> Right-Click Target</div>
             </div>
             <div class="border-l border-gray-700 pl-4">
-                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Enemy Base</p>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Enemy HQ</p>
                 <p class="text-xl font-black text-red-400 font-mono"><span id="enemy-hp">5000</span></p>
             </div>
         </div>
     </header>
 
-    <!-- -->
-    <main id="canvas-container" class="flex-1 relative w-full h-full bg-[#1a1f13] overflow-hidden">
+    <main id="canvas-container" class="flex-1 relative w-full h-full bg-[#12160e] overflow-hidden">
         <canvas id="gameCanvas" class="w-full h-full block cursor-crosshair"></canvas>
         <div id="selection-box" class="selection-box hidden"></div>
+        
+        <!-- Interactive Minimap Overlay -->
+        <div id="minimap-container" class="absolute top-3 right-3 w-48 h-24 bg-black/70 border border-gray-600 rounded-lg overflow-hidden shadow-2xl z-20">
+            <canvas id="minimapCanvas" class="w-full h-full block cursor-pointer"></canvas>
+        </div>
     </main>
 
-    <!-- -->
     <footer id="bottom-bar" class="ui-panel flex-none p-2.5 z-30 flex justify-between items-center shadow-lg border-t border-gray-800 gap-4">
-        <!-- Train Mobile Units -->
+        <!-- Train Units -->
         <div class="flex-1 flex flex-col gap-1">
-            <p class="text-xs font-bold text-gray-300 border-b border-gray-700 pb-0.5">Train Infantry & Armor (Mobile)</p>
+            <div class="flex justify-between items-center border-b border-gray-700 pb-0.5">
+                <p class="text-xs font-bold text-gray-300">Train Mobile Infantry & Armor</p>
+                <p id="queue-status-units" class="text-[10px] text-yellow-400 font-mono"></p>
+            </div>
             <div id="build-units" class="flex gap-2 overflow-x-auto py-1"></div>
         </div>
         
-        <!-- Construct Defenses -->
+        <!-- Construct Defenses & Facilities -->
         <div class="flex-1 flex flex-col gap-1 border-l border-gray-700 pl-4">
-            <p class="text-xs font-bold text-gray-300 border-b border-gray-700 pb-0.5">Construct Defenses (Static)</p>
+            <div class="flex justify-between items-center border-b border-gray-700 pb-0.5">
+                <p class="text-xs font-bold text-gray-300">Construct Defenses & Facilities</p>
+                <p id="queue-status-defenses" class="text-[10px] text-green-400 font-mono"></p>
+            </div>
             <div id="build-defenses" class="flex gap-2 overflow-x-auto py-1"></div>
         </div>
     </footer>
 
-    <!-- -->
     <div id="lobby-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50">
         <div class="ui-panel rounded-2xl p-8 max-w-md w-full text-center border border-gray-700 shadow-2xl">
-            <h2 class="text-3xl font-black text-green-400 mb-2 uppercase tracking-wide">Toy Soldier RTS</h2>
-            <p class="text-xs text-gray-400 mb-6">Plastic Toy Warfare • Multiplayer Edition</p>
+            <h2 class="text-3xl font-black text-green-400 mb-1 uppercase tracking-wide">Toy Soldier RTS</h2>
+            <p class="text-xs text-gray-400 mb-6">Plastic Warfare • Full Map & Facilities Edition</p>
 
             <div class="space-y-4 text-left mb-6">
                 <div>
@@ -125,28 +135,49 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        let width = canvas.width = canvasContainer.clientWidth;
-        let height = canvas.height = canvasContainer.clientHeight;
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
+
+        // World Dimensions (Expanded Field)
+        const WORLD_WIDTH = 2800;
+        const WORLD_HEIGHT = 1400;
+
+        let screenWidth = canvas.width = canvasContainer.clientWidth;
+        let screenHeight = canvas.height = canvasContainer.clientHeight;
+
+        // Camera Offset
+        let camera = { x: 0, y: WORLD_HEIGHT / 2 - screenHeight / 2 };
 
         window.addEventListener('resize', () => {
-            width = canvas.width = canvasContainer.clientWidth;
-            height = canvas.height = canvasContainer.clientHeight;
-            if (game) game.cacheTerrain();
+            screenWidth = canvas.width = canvasContainer.clientWidth;
+            screenHeight = canvas.height = canvasContainer.clientHeight;
+            clampCamera();
         });
 
-        // Game Stats & Balance Data
+        function clampCamera() {
+            camera.x = Math.max(0, Math.min(WORLD_WIDTH - screenWidth, camera.x));
+            camera.y = Math.max(0, Math.min(WORLD_HEIGHT - screenHeight, camera.y));
+        }
+
+        // Stats & Balance Data
         const UNITS = {
-            grunt: { name: "Rifleman", cost: 15, hp: 40, damage: 8, range: 110, cooldown: 30, speed: 1.5, weapon: 'light', armor: 'light', desc: "Fast light infantry." },
-            mg: { name: "Machine Gunner", cost: 25, hp: 50, damage: 4, range: 130, cooldown: 10, speed: 1.2, weapon: 'light', armor: 'light', desc: "High fire rate vs light armor." },
-            at: { name: "AT Infantry", cost: 40, hp: 60, damage: 45, range: 130, cooldown: 80, speed: 1.2, weapon: 'heavy', armor: 'light', desc: "Armor-piercing rockets." },
-            tank: { name: "Battle Tank", cost: 150, hp: 400, damage: 60, range: 160, cooldown: 60, speed: 0.8, weapon: 'heavy', armor: 'heavy', desc: "Heavy armor assault unit." }
+            grunt: { name: "Rifleman", cost: 15, hp: 40, damage: 8, range: 110, cooldown: 30, speed: 1.5, weapon: 'light', armor: 'light', buildTime: 3, req: 'infantry_tent', desc: "Fast light infantry. Req Tent." },
+            mg: { name: "Machine Gunner", cost: 25, hp: 50, damage: 4, range: 130, cooldown: 10, speed: 1.2, weapon: 'light', armor: 'light', buildTime: 4, req: 'infantry_tent', desc: "High fire rate vs light armor. Req Tent." },
+            at: { name: "AT Infantry", cost: 40, hp: 60, damage: 45, range: 130, cooldown: 80, speed: 1.2, weapon: 'heavy', armor: 'light', buildTime: 6, req: 'infantry_tent', desc: "Rockets vs tanks. Req Tent." },
+            tank: { name: "Battle Tank", cost: 150, hp: 400, damage: 60, range: 160, cooldown: 60, speed: 0.8, weapon: 'heavy', armor: 'heavy', buildTime: 12, req: 'tank_depot', desc: "Heavy armor assault unit. Req Depot." }
         };
 
         const BUILDINGS = {
-            barricade: { name: "Sandbags", cost: 10, hp: 300, radius: 15, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', desc: "Blocks movement & fire." },
-            pillbox: { name: "MG Pillbox", cost: 60, hp: 350, radius: 18, damage: 12, range: 150, cooldown: 15, weapon: 'light', armor: 'heavy', desc: "Rapid anti-infantry defense." },
-            at_gun: { name: "AT Gun", cost: 90, hp: 200, radius: 16, damage: 160, range: 260, cooldown: 90, weapon: 'heavy', armor: 'medium', desc: "Long-range anti-tank cannon." },
-            artillery: { name: "Howitzer", cost: 275, hp: 80, radius: 20, damage: 100, range: 450, cooldown: 300, weapon: 'explosive', armor: 'light', splash: 80, desc: "Long-range siege battery." }
+            // Static Defenses
+            barricade: { name: "Sandbags", cost: 10, hp: 300, radius: 15, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', buildTime: 2, desc: "Quick defensive barricade." },
+            pillbox: { name: "MG Pillbox", cost: 60, hp: 350, radius: 18, damage: 12, range: 150, cooldown: 15, weapon: 'light', armor: 'heavy', buildTime: 5, desc: "Anti-infantry pillbox." },
+            at_gun: { name: "AT Gun", cost: 90, hp: 200, radius: 16, damage: 160, range: 260, cooldown: 90, weapon: 'heavy', armor: 'medium', buildTime: 8, desc: "Long-range anti-tank cannon." },
+            artillery: { name: "Howitzer", cost: 275, hp: 80, radius: 20, damage: 100, range: 450, cooldown: 300, weapon: 'explosive', armor: 'light', splash: 80, buildTime: 15, desc: "Heavy siege artillery." },
+            
+            // Production & Economic Facilities
+            supply_depot: { name: "Supply Depot", cost: 120, hp: 1200, radius: 28, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'medium', buildTime: 8, desc: "Generates +$15 per 5 sec." },
+            infantry_tent: { name: "Infantry Tent", cost: 100, hp: 1000, radius: 30, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'medium', buildTime: 8, desc: "Required to train infantry." },
+            tank_depot: { name: "Tank Depot", cost: 200, hp: 1500, radius: 35, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', buildTime: 12, desc: "Required to train tanks." }
         };
 
         const Utils = {
@@ -161,7 +192,7 @@
 
         class Game {
             constructor() {
-                this.state = 'LOBBY'; // LOBBY, PREP, PLAYING, GAMEOVER
+                this.state = 'LOBBY'; 
                 this.frameCount = 0;
                 
                 this.money = { player: 1000, enemy: 1000 };
@@ -172,87 +203,126 @@
                 this.buildings = [];
                 this.bullets = [];
                 this.particles = [];
+                this.buildQueue = []; // Production items in progress
 
-                this.playerHQ = new HQ('player', 120, height / 2);
-                this.enemyHQ = new HQ('enemy', width - 120, height / 2);
+                // Starting HQ Facilities
+                this.playerHQ = new HQ('player', 150, WORLD_HEIGHT / 2);
+                this.enemyHQ = new HQ('enemy', WORLD_WIDTH - 150, WORLD_HEIGHT / 2);
 
                 this.selectedUnits = [];
                 this.buildMode = null; 
                 this.buildType = null;
 
-                this.mouse = { x: 0, y: 0, isDown: false, startX: 0, startY: 0 };
-                
+                // Mouse & Camera Dragging
+                this.mouse = { x: 0, y: 0, worldX: 0, worldY: 0, isDown: false, startX: 0, startY: 0, isPanning: false, panStartX: 0, panStartY: 0 };
+                this.keys = {};
+
                 this.terrainCanvas = document.createElement('canvas');
                 this.terrainCtx = this.terrainCanvas.getContext('2d');
                 
                 this.initUI();
+                this.setupStartingBases();
                 this.bindEvents();
                 this.cacheTerrain();
             }
 
+            setupStartingBases() {
+                // Setup Player Starting Facilities (Green/Left)
+                this.buildings.push(new Building('supply_depot', 'player', 120, WORLD_HEIGHT / 2 - 120, null, true));
+                this.buildings.push(new Building('infantry_tent', 'player', 120, WORLD_HEIGHT / 2 + 120, null, true));
+                this.buildings.push(new Building('tank_depot', 'player', 260, WORLD_HEIGHT / 2, null, true));
+
+                // Setup Enemy Starting Facilities (Yellow/Right)
+                this.buildings.push(new Building('supply_depot', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 - 120, null, true));
+                this.buildings.push(new Building('infantry_tent', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 + 120, null, true));
+                this.buildings.push(new Building('tank_depot', 'enemy', WORLD_WIDTH - 260, WORLD_HEIGHT / 2, null, true));
+            }
+
             cacheTerrain() {
-                this.terrainCanvas.width = width;
-                this.terrainCanvas.height = height;
-                this.terrainCtx.fillStyle = '#1a1f13';
-                this.terrainCtx.fillRect(0, 0, width, height);
-                for (let i = 0; i < 4000; i++) {
-                    this.terrainCtx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.05)';
-                    this.terrainCtx.fillRect(Math.random() * width, Math.random() * height, Math.random() * 4, Math.random() * 4);
+                this.terrainCanvas.width = WORLD_WIDTH;
+                this.terrainCanvas.height = WORLD_HEIGHT;
+                this.terrainCtx.fillStyle = '#161c10';
+                this.terrainCtx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+                
+                for (let i = 0; i < 12000; i++) {
+                    this.terrainCtx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.06)';
+                    this.terrainCtx.fillRect(Math.random() * WORLD_WIDTH, Math.random() * WORLD_HEIGHT, Math.random() * 5 + 1, Math.random() * 5 + 1);
                 }
+
+                // Grid Lines
+                this.terrainCtx.strokeStyle = 'rgba(255,255,255,0.03)';
+                this.terrainCtx.lineWidth = 1;
+                for (let x = 0; x < WORLD_WIDTH; x += 100) {
+                    this.terrainCtx.beginPath();
+                    this.terrainCtx.moveTo(x, 0);
+                    this.terrainCtx.lineTo(x, WORLD_HEIGHT);
+                    this.terrainCtx.stroke();
+                }
+                for (let y = 0; y < WORLD_HEIGHT; y += 100) {
+                    this.terrainCtx.beginPath();
+                    this.terrainCtx.moveTo(0, y);
+                    this.terrainCtx.lineTo(WORLD_WIDTH, y);
+                    this.terrainCtx.stroke();
+                }
+
+                // Deployment Territories
+                this.terrainCtx.fillStyle = 'rgba(74, 222, 128, 0.05)'; 
+                this.terrainCtx.fillRect(0, 0, WORLD_WIDTH/2 - 100, WORLD_HEIGHT);
                 
-                // Territory Zones
-                this.terrainCtx.fillStyle = 'rgba(74, 222, 128, 0.08)'; 
-                this.terrainCtx.fillRect(0, 0, width/2 - 50, height);
-                
-                this.terrainCtx.fillStyle = 'rgba(250, 204, 21, 0.08)'; 
-                this.terrainCtx.fillRect(width/2 + 50, 0, width/2, height);
+                this.terrainCtx.fillStyle = 'rgba(250, 204, 21, 0.05)'; 
+                this.terrainCtx.fillRect(WORLD_WIDTH/2 + 100, 0, WORLD_WIDTH/2, WORLD_HEIGHT);
             }
 
             aiPrepBase() {
-                if (isMultiplayer) return; // AI doesn't run in MP
+                if (isMultiplayer) return;
                 while(this.money.enemy >= 60) {
-                    const affordableBlds = Object.keys(BUILDINGS).filter(k => BUILDINGS[k].cost <= this.money.enemy);
+                    const affordableBlds = Object.keys(BUILDINGS).filter(k => BUILDINGS[k].cost <= this.money.enemy && k !== 'supply_depot' && k !== 'infantry_tent' && k !== 'tank_depot');
                     if (affordableBlds.length === 0) break;
                     let type = affordableBlds[Math.floor(Math.random() * affordableBlds.length)];
                     this.money.enemy -= BUILDINGS[type].cost;
-                    let bx = type === 'artillery' ? this.enemyHQ.x - 200 + Math.random()*120 : this.enemyHQ.x - 350 + Math.random()*180;
-                    let by = 80 + Math.random() * (height - 160);
-                    this.buildings.push(new Building(type, 'enemy', bx, by));
-                }
-                while(this.money.enemy >= 15) {
-                    const affordableUnits = Object.keys(UNITS).filter(k => UNITS[k].cost <= this.money.enemy);
-                    if (affordableUnits.length === 0) break;
-                    let type = affordableUnits[Math.floor(Math.random() * affordableUnits.length)];
-                    this.money.enemy -= UNITS[type].cost;
-                    let ux = this.enemyHQ.x - 100 + Math.random()*80;
-                    let uy = this.enemyHQ.y - 120 + Math.random()*240;
-                    this.units.push(new Unit(type, 'enemy', ux, uy));
+                    let bx = type === 'artillery' ? this.enemyHQ.x - 250 + Math.random()*120 : this.enemyHQ.x - 500 + Math.random()*250;
+                    let by = 120 + Math.random() * (WORLD_HEIGHT - 240);
+                    this.buildings.push(new Building(type, 'enemy', bx, by, null, true));
                 }
             }
 
             bindEvents() {
                 const box = document.getElementById('selection-box');
 
-                canvas.addEventListener('mousedown', (e) => {
+                // Correct Mouse Position Mapping
+                const updateMousePos = (e) => {
                     const rect = canvas.getBoundingClientRect();
-                    const mouseX = e.clientX - rect.left;
-                    const mouseY = e.clientY - rect.top;
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
 
-                    // Right Click: Move/Attack Command
+                    this.mouse.x = (e.clientX - rect.left) * scaleX;
+                    this.mouse.y = (e.clientY - rect.top) * scaleY;
+                    this.mouse.worldX = this.mouse.x + camera.x;
+                    this.mouse.worldY = this.mouse.y + camera.y;
+                };
+
+                window.addEventListener('keydown', (e) => { this.keys[e.key.toLowerCase()] = true; });
+                window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
+
+                canvas.addEventListener('mousedown', (e) => {
+                    updateMousePos(e);
+
+                    // Right Click: Pan Map OR Move/Attack Order
                     if (e.button === 2) {
                         e.preventDefault();
-                        if (this.state !== 'PLAYING') return; 
+
                         if (this.buildMode) {
                             this.buildMode = null;
                             this.buildType = null;
                             return;
                         }
+
                         if (this.selectedUnits.length > 0) {
                             let targetEnemy = null;
                             const targetTeam = localRole === 'player' ? 'enemy' : 'player';
                             
                             const checkEntity = (ent) => {
-                                if (ent.team === targetTeam && !ent.dead && Utils.dist(mouseX, mouseY, ent.x, ent.y) < (ent.data?.radius || 20)) {
+                                if (ent.team === targetTeam && !ent.dead && Utils.dist(this.mouse.worldX, this.mouse.worldY, ent.x, ent.y) < (ent.data?.radius || 20)) {
                                     targetEnemy = ent;
                                 }
                             };
@@ -260,7 +330,7 @@
                             this.buildings.forEach(checkEntity);
                             
                             const enemyHQ = localRole === 'player' ? this.enemyHQ : this.playerHQ;
-                            if (Utils.dist(mouseX, mouseY, enemyHQ.x, enemyHQ.y) < 40) targetEnemy = enemyHQ;
+                            if (Utils.dist(this.mouse.worldX, this.mouse.worldY, enemyHQ.x, enemyHQ.y) < 40) targetEnemy = enemyHQ;
 
                             const uIds = [];
                             this.selectedUnits.forEach(u => {
@@ -270,8 +340,8 @@
                                     u.state = 'chasing';
                                     u.destX = null;
                                 } else {
-                                    u.destX = mouseX + (Math.random() - 0.5) * 40;
-                                    u.destY = mouseY + (Math.random() - 0.5) * 40;
+                                    u.destX = this.mouse.worldX + (Math.random() - 0.5) * 50;
+                                    u.destY = this.mouse.worldY + (Math.random() - 0.5) * 50;
                                     u.state = 'moving';
                                     u.target = null;
                                 }
@@ -281,52 +351,72 @@
                                 socket.emit('unit_command', {
                                     unitIds: uIds,
                                     targetId: targetEnemy ? targetEnemy.id : null,
-                                    destX: mouseX,
-                                    destY: mouseY
+                                    destX: this.mouse.worldX,
+                                    destY: this.mouse.worldY
                                 });
                             }
 
-                            this.createExplosion(mouseX, mouseY, localRole === 'player' ? '#4ade80' : '#fde047', 5, 2);
+                            this.createExplosion(this.mouse.worldX, this.mouse.worldY, localRole === 'player' ? '#4ade80' : '#fde047', 5, 2);
+                        } else {
+                            // Start Camera Pan
+                            this.mouse.isPanning = true;
+                            this.mouse.panStartX = e.clientX;
+                            this.mouse.panStartY = e.clientY;
                         }
                         return;
                     }
 
-                    // Left Click: Build or Select
+                    // Middle Mouse Pan
+                    if (e.button === 1) {
+                        e.preventDefault();
+                        this.mouse.isPanning = true;
+                        this.mouse.panStartX = e.clientX;
+                        this.mouse.panStartY = e.clientY;
+                        return;
+                    }
+
+                    // Left Click: Build, Train, or Select
                     if (e.button === 0) {
                         if (this.buildMode) {
-                            let cost = this.buildMode === 'unit' ? UNITS[this.buildType].cost : BUILDINGS[this.buildType].cost;
+                            let data = this.buildMode === 'unit' ? UNITS[this.buildType] : BUILDINGS[this.buildType];
                             
-                            // Check valid side deployment
+                            // Check Valid Side Deployment
                             let validX = localRole === 'player' 
-                                ? (this.buildMode === 'unit' ? mouseX < width/2 - 20 : mouseX < width/2 - 80)
-                                : (this.buildMode === 'unit' ? mouseX > width/2 + 20 : mouseX > width/2 + 80);
+                                ? (this.buildMode === 'unit' ? this.mouse.worldX < WORLD_WIDTH/2 - 20 : this.mouse.worldX < WORLD_WIDTH/2 - 100)
+                                : (this.buildMode === 'unit' ? this.mouse.worldX > WORLD_WIDTH/2 + 20 : this.mouse.worldX > WORLD_WIDTH/2 + 100);
 
-                            if (this.money[localRole] >= cost && validX) {
-                                this.money[localRole] -= cost;
-                                const uid = `${localRole}_${Date.now()}_${Math.random()}`;
-
+                            if (this.money[localRole] >= data.cost && validX) {
                                 if (this.buildMode === 'unit') {
-                                    const u = new Unit(this.buildType, localRole, mouseX, mouseY, uid);
-                                    this.units.push(u);
-                                    if (isMultiplayer) socket.emit('spawn_unit', { type: this.buildType, team: localRole, x: mouseX, y: mouseY, id: uid });
+                                    // Check Facility Requirement
+                                    const hasFacility = this.buildings.some(b => b.team === localRole && b.type === data.req && !b.dead && b.completed);
+                                    if (!hasFacility) {
+                                        this.showNotice(`Requires an active ${BUILDINGS[data.req].name}!`);
+                                        return;
+                                    }
+
+                                    // Deduct Money & Queue Production
+                                    this.money[localRole] -= data.cost;
+                                    this.queueUnitProduction(this.buildType, localRole);
                                 } else {
-                                    const b = new Building(this.buildType, localRole, mouseX, mouseY, uid);
+                                    this.money[localRole] -= data.cost;
+                                    const uid = `${localRole}_${Date.now()}_${Math.random()}`;
+                                    const b = new Building(this.buildType, localRole, this.mouse.worldX, this.mouse.worldY, uid, false);
                                     this.buildings.push(b);
-                                    if (isMultiplayer) socket.emit('build_structure', { type: this.buildType, team: localRole, x: mouseX, y: mouseY, id: uid });
+                                    if (isMultiplayer) socket.emit('build_structure', { type: this.buildType, team: localRole, x: this.mouse.worldX, y: this.mouse.worldY, id: uid });
                                 }
                                 this.updateUI();
                             }
                             return; 
                         }
 
+                        // Start Selection Box
                         this.mouse.isDown = true;
-                        this.mouse.startX = mouseX;
-                        this.mouse.startY = mouseY;
-                        this.mouse.x = mouseX;
-                        this.mouse.y = mouseY;
+                        this.mouse.startX = this.mouse.x;
+                        this.mouse.startY = this.mouse.y;
 
-                        box.style.left = (rect.left + mouseX) + 'px';
-                        box.style.top = (rect.top + mouseY) + 'px';
+                        const rect = canvas.getBoundingClientRect();
+                        box.style.left = (rect.left + this.mouse.x) + 'px';
+                        box.style.top = (rect.top + this.mouse.y) + 'px';
                         box.style.width = '0px';
                         box.style.height = '0px';
                         box.classList.remove('hidden');
@@ -334,9 +424,18 @@
                 });
 
                 canvas.addEventListener('mousemove', (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    this.mouse.x = e.clientX - rect.left;
-                    this.mouse.y = e.clientY - rect.top;
+                    updateMousePos(e);
+
+                    if (this.mouse.isPanning) {
+                        let dx = e.clientX - this.mouse.panStartX;
+                        let dy = e.clientY - this.mouse.panStartY;
+                        camera.x -= dx;
+                        camera.y -= dy;
+                        clampCamera();
+                        this.mouse.panStartX = e.clientX;
+                        this.mouse.panStartY = e.clientY;
+                        return;
+                    }
 
                     if (this.mouse.isDown) {
                         let x = Math.min(this.mouse.x, this.mouse.startX);
@@ -344,6 +443,7 @@
                         let w = Math.abs(this.mouse.x - this.mouse.startX);
                         let h = Math.abs(this.mouse.y - this.mouse.startY);
 
+                        const rect = canvas.getBoundingClientRect();
                         box.style.left = (rect.left + x) + 'px';
                         box.style.top = (rect.top + y) + 'px';
                         box.style.width = w + 'px';
@@ -351,17 +451,21 @@
                     }
                 });
 
-                canvas.addEventListener('mouseup', (e) => {
+                window.addEventListener('mouseup', (e) => {
+                    if (this.mouse.isPanning) {
+                        this.mouse.isPanning = false;
+                    }
+
                     if (e.button === 0 && this.mouse.isDown) {
                         this.mouse.isDown = false;
                         box.classList.add('hidden');
                         
-                        let sx = Math.min(this.mouse.x, this.mouse.startX);
-                        let sy = Math.min(this.mouse.y, this.mouse.startY);
+                        let sx = Math.min(this.mouse.x, this.mouse.startX) + camera.x;
+                        let sy = Math.min(this.mouse.y, this.mouse.startY) + camera.y;
                         let sw = Math.abs(this.mouse.x - this.mouse.startX);
                         let sh = Math.abs(this.mouse.y - this.mouse.startY);
 
-                        if (sw < 5 && sh < 5) { sx -= 10; sy -= 10; sw = 20; sh = 20; }
+                        if (sw < 8 && sh < 8) { sx -= 15; sy -= 15; sw = 30; sh = 30; }
 
                         this.selectedUnits = [];
                         this.units.forEach(u => {
@@ -375,6 +479,17 @@
                 });
 
                 canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+                // Interactive Minimap Click-to-Jump
+                minimapCanvas.addEventListener('click', (e) => {
+                    const rect = minimapCanvas.getBoundingClientRect();
+                    const mx = (e.clientX - rect.left) / rect.width;
+                    const my = (e.clientY - rect.top) / rect.height;
+
+                    camera.x = mx * WORLD_WIDTH - screenWidth / 2;
+                    camera.y = my * WORLD_HEIGHT - screenHeight / 2;
+                    clampCamera();
+                });
 
                 document.getElementById('start-btn').addEventListener('click', () => {
                     if (isMultiplayer) {
@@ -401,6 +516,32 @@
                 });
             }
 
+            showNotice(msg) {
+                const banner = document.getElementById('prep-desc');
+                const oldMsg = banner.innerText;
+                banner.innerText = msg;
+                banner.classList.add('text-red-400', 'font-bold');
+                setTimeout(() => {
+                    banner.innerText = oldMsg;
+                    banner.classList.remove('text-red-400', 'font-bold');
+                }, 2500);
+            }
+
+            queueUnitProduction(type, team) {
+                const data = UNITS[type];
+                const reqFacility = this.buildings.find(b => b.team === team && b.type === data.req && !b.dead && b.completed);
+                if (!reqFacility) return;
+
+                this.buildQueue.push({
+                    type: type,
+                    team: team,
+                    isUnit: true,
+                    timer: data.buildTime * 60,
+                    maxTimer: data.buildTime * 60,
+                    facilityId: reqFacility.id
+                });
+            }
+
             startMatch() {
                 this.state = 'PLAYING';
                 document.getElementById('prep-banner').classList.add('hidden');
@@ -414,11 +555,13 @@
                 
                 const createBtn = (type, data, isBuilding) => {
                     let btn = document.createElement('button');
-                    btn.className = `flex-shrink-0 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-1.5 text-left w-28 transition text-xs`;
+                    btn.className = `flex-shrink-0 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-1.5 text-left w-32 transition text-xs flex flex-col justify-between`;
                     btn.innerHTML = `
-                        <div class="font-bold text-white leading-tight">${data.name}</div>
-                        <div class="text-green-400 font-mono text-[11px] mb-0.5">$${data.cost}</div>
-                        <div class="text-[9px] text-gray-400 leading-tight">${data.desc}</div>
+                        <div>
+                            <div class="font-bold text-white leading-tight">${data.name}</div>
+                            <div class="text-green-400 font-mono text-[11px] mb-0.5">$${data.cost} <span class="text-gray-400 text-[9px]">(${data.buildTime}s)</span></div>
+                        </div>
+                        <div class="text-[9px] text-gray-400 leading-tight mt-1">${data.desc}</div>
                     `;
                     btn.onclick = () => {
                         this.buildMode = isBuilding ? 'building' : 'unit';
@@ -442,6 +585,11 @@
                 document.getElementById('player-hp').innerText = Math.floor(Math.max(0, localRole === 'player' ? this.playerHQ.hp : this.enemyHQ.hp));
                 document.getElementById('enemy-hp').innerText = Math.floor(Math.max(0, localRole === 'player' ? this.enemyHQ.hp : this.playerHQ.hp));
 
+                // Calculate Income Rate
+                const activeDepots = this.buildings.filter(b => b.team === localRole && b.type === 'supply_depot' && !b.dead && b.completed).length;
+                const totalIncome = 15 + activeDepots * 15;
+                document.getElementById('income-rate').innerText = `+$${totalIncome}/5s`;
+
                 const sBtn = document.getElementById('supply-btn');
                 const sTime = document.getElementById('supply-time');
                 if (this.supplyCooldown[localRole] > 0) {
@@ -457,16 +605,49 @@
                 if (this.state === 'GAMEOVER') return;
                 this.frameCount++;
 
-                if (this.state === 'PLAYING') {
-                    // Passive Income
-                    if (this.frameCount % 60 === 0) {
-                        this.addMoney('player', 2.5);
-                        this.addMoney('enemy', 2.5);
-                    }
+                // Camera Keyboard Controls
+                const speed = 12;
+                if (this.keys['a'] || this.keys['arrowleft']) camera.x -= speed;
+                if (this.keys['d'] || this.keys['arrowright']) camera.x += speed;
+                if (this.keys['w'] || this.keys['arrowup']) camera.y -= speed;
+                if (this.keys['s'] || this.keys['arrowdown']) camera.y += speed;
+                clampCamera();
 
+                // Passive Income & Facilities Boost
+                if (this.state === 'PLAYING' && this.frameCount % 300 === 0) { // Every 5 sec
+                    ['player', 'enemy'].forEach(team => {
+                        const depots = this.buildings.filter(b => b.team === team && b.type === 'supply_depot' && !b.dead && b.completed).length;
+                        this.addMoney(team, 15 + depots * 15);
+                    });
+                }
+
+                if (this.state === 'PLAYING') {
                     if (this.supplyCooldown.player > 0) this.supplyCooldown.player--;
                     if (this.supplyCooldown.enemy > 0) this.supplyCooldown.enemy--;
                     if (this.frameCount % 10 === 0) this.updateUI();
+
+                    // Process Production Queue
+                    for (let i = this.buildQueue.length - 1; i >= 0; i--) {
+                        let q = this.buildQueue[i];
+                        q.timer--;
+
+                        if (q.timer <= 0) {
+                            if (q.isUnit) {
+                                const facility = this.buildings.find(b => b.id === q.facilityId && !b.dead);
+                                const spawnX = facility ? facility.x + (q.team === 'player' ? 40 : -40) : (q.team === 'player' ? 200 : WORLD_WIDTH - 200);
+                                const spawnY = facility ? facility.y : WORLD_HEIGHT / 2;
+
+                                const uid = `${q.team}_${Date.now()}_${Math.random()}`;
+                                const u = new Unit(q.type, q.team, spawnX, spawnY, uid);
+                                this.units.push(u);
+
+                                if (isMultiplayer && q.team === localRole) {
+                                    socket.emit('spawn_unit', { type: q.type, team: q.team, x: spawnX, y: spawnY, id: uid });
+                                }
+                            }
+                            this.buildQueue.splice(i, 1);
+                        }
+                    }
 
                     // Single Player AI Logic
                     if (!isMultiplayer) {
@@ -476,28 +657,21 @@
                             this.createExplosion(this.enemyHQ.x, this.enemyHQ.y, '#fef08a', 30);
                         }
 
-                        if (this.money.enemy > 600 && Math.random() < 0.02) {
+                        // AI Unit Production Wave
+                        if (this.money.enemy > 500 && Math.random() < 0.02) {
                             let spawned = 0;
-                            while (this.money.enemy >= 15 && spawned < 12) {
-                                const affordable = Object.keys(UNITS).filter(k => UNITS[k].cost <= this.money.enemy);
+                            while (this.money.enemy >= 15 && spawned < 8) {
+                                const affordable = Object.keys(UNITS).filter(k => {
+                                    const req = UNITS[k].req;
+                                    const hasReq = this.buildings.some(b => b.team === 'enemy' && b.type === req && !b.dead && b.completed);
+                                    return UNITS[k].cost <= this.money.enemy && hasReq;
+                                });
                                 if (affordable.length > 0) {
                                     let type = affordable[Math.floor(Math.random() * affordable.length)];
                                     this.money.enemy -= UNITS[type].cost;
-                                    let u = new Unit(type, 'enemy', this.enemyHQ.x - 100 + Math.random()*80, this.enemyHQ.y - 120 + Math.random()*240);
-                                    this.units.push(u);
+                                    this.queueUnitProduction(type, 'enemy');
                                     spawned++;
                                 } else break;
-                            }
-                        }
-
-                        if (this.money.enemy > 200 && Math.random() < 0.01) {
-                            const affordableBlds = Object.keys(BUILDINGS).filter(k => BUILDINGS[k].cost <= this.money.enemy);
-                            if (affordableBlds.length > 0) {
-                                let type = affordableBlds[Math.floor(Math.random() * affordableBlds.length)];
-                                this.money.enemy -= BUILDINGS[type].cost;
-                                let bx = type === 'artillery' ? this.enemyHQ.x - 200 + Math.random()*120 : this.enemyHQ.x - 350 + Math.random()*180;
-                                let by = 80 + Math.random() * (height - 160);
-                                this.buildings.push(new Building(type, 'enemy', bx, by));
                             }
                         }
                     }
@@ -545,8 +719,8 @@
             }
 
             calcDamage(damage, weapon, armor) {
-                if (weapon === 'light' && armor === 'heavy') return 0; // Bullets bounce off tanks
-                if (weapon === 'heavy' && armor === 'heavy') return damage * 2; // AT guns shred tanks
+                if (weapon === 'light' && armor === 'heavy') return 0;
+                if (weapon === 'heavy' && armor === 'heavy') return damage * 2;
                 if (weapon === 'explosive' && armor === 'heavy') return damage * 0.5; 
                 return damage;
             }
@@ -577,21 +751,25 @@
             }
 
             draw() {
+                ctx.save();
+                ctx.translate(-camera.x, -camera.y);
+
+                // Terrain Background
                 ctx.drawImage(this.terrainCanvas, 0, 0);
 
                 if (this.state === 'PREP') {
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
                     if (localRole === 'player') {
-                        ctx.fillRect(width/2, 0, width/2, height);
+                        ctx.fillRect(WORLD_WIDTH/2, 0, WORLD_WIDTH/2, WORLD_HEIGHT);
                     } else {
-                        ctx.fillRect(0, 0, width/2, height);
+                        ctx.fillRect(0, 0, WORLD_WIDTH/2, WORLD_HEIGHT);
                     }
                     ctx.strokeStyle = '#ef4444';
                     ctx.lineWidth = 3;
                     ctx.setLineDash([10, 10]);
                     ctx.beginPath();
-                    ctx.moveTo(width/2, 0);
-                    ctx.lineTo(width/2, height);
+                    ctx.moveTo(WORLD_WIDTH/2, 0);
+                    ctx.lineTo(WORLD_WIDTH/2, WORLD_HEIGHT);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
@@ -612,6 +790,7 @@
                 this.bullets.forEach(b => b.draw(ctx));
                 this.particles.forEach(p => p.draw(ctx));
 
+                // Selection Indicators
                 this.selectedUnits.forEach(u => {
                     ctx.strokeStyle = localRole === 'player' ? '#4ade80' : '#fde047';
                     ctx.lineWidth = 2;
@@ -620,13 +799,14 @@
                     ctx.stroke();
                 });
 
+                // Build Preview Cursor
                 if (this.buildMode) {
                     ctx.globalAlpha = 0.5;
                     let color = this.buildMode === 'unit' ? '#4ade80' : '#3b82f6';
                     let r = this.buildMode === 'unit' ? 12 : BUILDINGS[this.buildType].radius;
                     ctx.fillStyle = color;
                     ctx.beginPath();
-                    ctx.arc(this.mouse.x, this.mouse.y, r, 0, Math.PI*2);
+                    ctx.arc(this.mouse.worldX, this.mouse.worldY, r, 0, Math.PI*2);
                     ctx.fill();
                     
                     let range = this.buildMode === 'unit' ? UNITS[this.buildType].range : BUILDINGS[this.buildType].range;
@@ -634,11 +814,56 @@
                         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
                         ctx.lineWidth = 1;
                         ctx.beginPath();
-                        ctx.arc(this.mouse.x, this.mouse.y, range, 0, Math.PI*2);
+                        ctx.arc(this.mouse.worldX, this.mouse.worldY, range, 0, Math.PI*2);
                         ctx.stroke();
                     }
                     ctx.globalAlpha = 1.0;
                 }
+
+                ctx.restore();
+
+                // Draw Minimap Overview
+                this.drawMinimap();
+            }
+
+            drawMinimap() {
+                const mw = minimapCanvas.width = 192;
+                const mh = minimapCanvas.height = 96;
+                const scaleX = mw / WORLD_WIDTH;
+                const scaleY = mh / WORLD_HEIGHT;
+
+                minimapCtx.fillStyle = '#0f140a';
+                minimapCtx.fillRect(0, 0, mw, mh);
+
+                // Territory Divider
+                minimapCtx.strokeStyle = 'rgba(255,255,255,0.2)';
+                minimapCtx.lineWidth = 1;
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(mw / 2, 0);
+                minimapCtx.lineTo(mw / 2, mh);
+                minimapCtx.stroke();
+
+                // Draw Entities on Minimap
+                this.buildings.forEach(b => {
+                    minimapCtx.fillStyle = b.team === 'player' ? '#22c55e' : '#eab308';
+                    minimapCtx.fillRect(b.x * scaleX - 2, b.y * scaleY - 2, 4, 4);
+                });
+
+                this.units.forEach(u => {
+                    minimapCtx.fillStyle = u.team === 'player' ? '#4ade80' : '#fde047';
+                    minimapCtx.fillRect(u.x * scaleX - 1, u.y * scaleY - 1, 2, 2);
+                });
+
+                // HQs
+                minimapCtx.fillStyle = '#166534';
+                minimapCtx.fillRect(this.playerHQ.x * scaleX - 4, this.playerHQ.y * scaleY - 4, 8, 8);
+                minimapCtx.fillStyle = '#854d0e';
+                minimapCtx.fillRect(this.enemyHQ.x * scaleX - 4, this.enemyHQ.y * scaleY - 4, 8, 8);
+
+                // Viewport Rectangle
+                minimapCtx.strokeStyle = '#ffffff';
+                minimapCtx.lineWidth = 1;
+                minimapCtx.strokeRect(camera.x * scaleX, camera.y * scaleY, screenWidth * scaleX, screenHeight * scaleY);
             }
 
             loop() {
@@ -865,7 +1090,7 @@
         }
 
         class Building {
-            constructor(type, team, x, y, id = null) {
+            constructor(type, team, x, y, id = null, instant = false) {
                 this.id = id || `${team}_${Date.now()}_${Math.random()}`;
                 this.type = type;
                 this.team = team;
@@ -879,12 +1104,27 @@
                 this.radius = this.data.radius;
                 this.target = null;
                 this.color = team === 'player' ? '#14532d' : '#713f12'; 
+
+                // Construction Progress
+                this.completed = instant;
+                this.buildTimer = instant ? 0 : this.data.buildTime * 60;
+                this.maxBuildTimer = this.data.buildTime * 60;
             }
 
             update(game) {
                 if (this.hp <= 0) {
                     this.dead = true;
                     game.createExplosion(this.x, this.y, '#9ca3af', 15);
+                    return;
+                }
+
+                // Handle Construction Delay
+                if (!this.completed) {
+                    this.buildTimer--;
+                    if (this.buildTimer <= 0) {
+                        this.completed = true;
+                        game.createExplosion(this.x, this.y, '#4ade80', 10, 2);
+                    }
                     return;
                 }
                 
@@ -931,6 +1171,28 @@
                 ctx.shadowColor = 'rgba(0,0,0,0.8)';
                 ctx.shadowBlur = 6;
 
+                // Construction Site Appearance
+                if (!this.completed) {
+                    ctx.fillStyle = '#374151';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#eab308';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([6, 6]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.restore();
+
+                    // Progress Bar
+                    const progress = 1 - (this.buildTimer / this.maxBuildTimer);
+                    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                    ctx.fillRect(this.x - 20, this.y - this.radius - 12, 40, 6);
+                    ctx.fillStyle = '#eab308';
+                    ctx.fillRect(this.x - 20, this.y - this.radius - 12, 40 * progress, 6);
+                    return;
+                }
+
                 ctx.fillStyle = '#4b5563'; 
                 ctx.beginPath();
                 if (this.type === 'barricade') {
@@ -957,6 +1219,25 @@
                     ctx.fillRect(-12, -12, 24, 24);
                     ctx.fillStyle = '#222';
                     ctx.fillRect(0, -5, 35, 10);
+                } else if (this.type === 'supply_depot') {
+                    ctx.fillStyle = '#1e3a8a';
+                    ctx.fillRect(-18, -18, 36, 36);
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.font = 'bold 16px Inter';
+                    ctx.fillText('$', -5, 6);
+                } else if (this.type === 'infantry_tent') {
+                    ctx.fillStyle = '#065f46';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -20);
+                    ctx.lineTo(20, 15);
+                    ctx.lineTo(-20, 15);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (this.type === 'tank_depot') {
+                    ctx.fillStyle = '#374151';
+                    ctx.fillRect(-22, -22, 44, 44);
+                    ctx.fillStyle = '#111827';
+                    ctx.fillRect(-14, -14, 28, 28);
                 }
 
                 ctx.restore();
@@ -1035,7 +1316,7 @@
                     }
                 }
 
-                if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) this.dead = true;
+                if (this.x < 0 || this.x > WORLD_WIDTH || this.y < 0 || this.y > WORLD_HEIGHT) this.dead = true;
             }
 
             draw(ctx) {
@@ -1111,7 +1392,7 @@
                 });
 
                 socket.on('opponent_build_structure', (data) => {
-                    game.buildings.push(new Building(data.type, data.team, data.x, data.y, data.id));
+                    game.buildings.push(new Building(data.type, data.team, data.x, data.y, data.id, false));
                 });
 
                 socket.on('opponent_unit_command', (data) => {
