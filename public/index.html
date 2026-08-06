@@ -12,15 +12,17 @@
         .selection-box { position: absolute; border: 1px solid rgba(134, 239, 172, 0.8); background: rgba(134, 239, 172, 0.2); pointer-events: none; z-index: 20; }
         .ui-panel { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
         
-        ::-webkit-scrollbar { height: 6px; width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.4); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6b7280; }
     </style>
 </head>
 <body class="text-white h-screen w-screen flex flex-col overflow-hidden">
 
     <header id="top-bar" class="ui-panel flex-none p-3 z-30 flex justify-between items-center shadow-lg border-b border-gray-800">
-        <!-- Player Economy Stats -->
+        <!-- Economy & Base Integrity -->
         <div class="flex gap-4 items-center">
             <div>
                 <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">War Funds</p>
@@ -75,30 +77,43 @@
         </div>
     </main>
 
-    <footer id="bottom-bar" class="ui-panel flex-none p-2.5 z-30 flex justify-between items-center shadow-lg border-t border-gray-800 gap-4">
-        <!-- Train Units -->
-        <div class="flex-1 flex flex-col gap-1">
-            <div class="flex justify-between items-center border-b border-gray-700 pb-0.5">
-                <p class="text-xs font-bold text-gray-300">Train Mobile Infantry & Armor</p>
-                <p id="queue-status-units" class="text-[10px] text-yellow-400 font-mono"></p>
-            </div>
-            <div id="build-units" class="flex gap-2 overflow-x-auto py-1"></div>
-        </div>
-        
-        <!-- Construct Defenses & Facilities -->
-        <div class="flex-1 flex flex-col gap-1 border-l border-gray-700 pl-4">
+    <footer id="bottom-bar" class="ui-panel flex-none p-2.5 z-30 flex justify-between items-stretch shadow-lg border-t border-gray-800 gap-4 min-h-[115px]">
+        <!-- Construct Defenses & Facilities (Scrollable Menu) -->
+        <div class="w-1/2 flex flex-col gap-1 pr-3 border-r border-gray-700">
             <div class="flex justify-between items-center border-b border-gray-700 pb-0.5">
                 <p class="text-xs font-bold text-gray-300">Construct Defenses & Facilities</p>
-                <p id="queue-status-defenses" class="text-[10px] text-green-400 font-mono"></p>
+                <p class="text-[10px] text-gray-400 font-mono">Scroll right for more →</p>
             </div>
-            <div id="build-defenses" class="flex gap-2 overflow-x-auto py-1"></div>
+            <div id="build-defenses" class="flex gap-2 overflow-x-auto py-1.5 custom-scrollbar flex-1 items-center"></div>
+        </div>
+        
+        <!-- Selected Factory Production & Queue Panel -->
+        <div id="factory-panel" class="w-1/2 flex flex-col gap-1 pl-1">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-0.5">
+                <div class="flex items-center gap-2">
+                    <span id="factory-title" class="text-xs font-bold text-green-400">No Facility Selected</span>
+                    <span id="factory-hp" class="text-[10px] font-mono text-gray-400"></span>
+                </div>
+                <p id="factory-queue-count" class="text-[10px] text-yellow-400 font-mono"></p>
+            </div>
+
+            <div class="flex-1 flex gap-3 items-center overflow-hidden">
+                <!-- Dynamic Train Buttons for Selected Facility -->
+                <div id="factory-train-options" class="flex gap-2 items-center flex-shrink-0">
+                    <p class="text-xs text-gray-500 italic py-2">Click an Infantry Tent, Tank Depot, or HQ on map to train units.</p>
+                </div>
+
+                <!-- Active Production Queue List -->
+                <div id="factory-queue-list" class="flex-1 flex gap-1.5 overflow-x-auto custom-scrollbar py-1 items-center border-l border-gray-800 pl-3 min-h-[50px]">
+                </div>
+            </div>
         </div>
     </footer>
 
     <div id="lobby-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50">
         <div class="ui-panel rounded-2xl p-8 max-w-md w-full text-center border border-gray-700 shadow-2xl">
             <h2 class="text-3xl font-black text-green-400 mb-1 uppercase tracking-wide">Toy Soldier RTS</h2>
-            <p class="text-xs text-gray-400 mb-6">Plastic Warfare • Full Map & Facilities Edition</p>
+            <p class="text-xs text-gray-400 mb-6">Plastic Warfare • Factory Queue & Zoom Edition</p>
 
             <div class="space-y-4 text-left mb-6">
                 <div>
@@ -162,12 +177,11 @@
             camera.y = Math.max(0, Math.min(WORLD_HEIGHT - screenHeight / zoom, camera.y));
         }
 
-        // Stats & Balance Data
         const UNITS = {
-            grunt: { name: "Rifleman", cost: 15, hp: 40, damage: 8, range: 110, cooldown: 30, speed: 1.5, weapon: 'light', armor: 'light', buildTime: 3, req: 'infantry_tent', desc: "Fast light infantry. Req Tent." },
-            mg: { name: "Machine Gunner", cost: 25, hp: 50, damage: 4, range: 130, cooldown: 10, speed: 1.2, weapon: 'light', armor: 'light', buildTime: 4, req: 'infantry_tent', desc: "High fire rate vs light armor. Req Tent." },
-            at: { name: "AT Infantry", cost: 40, hp: 60, damage: 45, range: 130, cooldown: 80, speed: 1.2, weapon: 'heavy', armor: 'light', buildTime: 6, req: 'infantry_tent', desc: "Rockets vs tanks. Req Tent." },
-            tank: { name: "Battle Tank", cost: 150, hp: 400, damage: 60, range: 160, cooldown: 60, speed: 0.8, weapon: 'heavy', armor: 'heavy', buildTime: 12, req: 'tank_depot', desc: "Heavy armor assault unit. Req Depot." }
+            grunt: { name: "Rifleman", cost: 15, hp: 40, damage: 8, range: 110, cooldown: 30, speed: 1.5, weapon: 'light', armor: 'light', buildTime: 3, req: 'infantry_tent', desc: "Fast light infantry." },
+            mg: { name: "Machine Gunner", cost: 25, hp: 50, damage: 4, range: 130, cooldown: 10, speed: 1.2, weapon: 'light', armor: 'light', buildTime: 4, req: 'infantry_tent', desc: "High fire rate vs light armor." },
+            at: { name: "AT Infantry", cost: 40, hp: 60, damage: 45, range: 130, cooldown: 80, speed: 1.2, weapon: 'heavy', armor: 'light', buildTime: 6, req: 'infantry_tent', desc: "Rockets vs tanks." },
+            tank: { name: "Battle Tank", cost: 150, hp: 400, damage: 60, range: 160, cooldown: 60, speed: 0.8, weapon: 'heavy', armor: 'heavy', buildTime: 12, req: 'tank_depot', desc: "Heavy armor assault unit." }
         };
 
         const BUILDINGS = {
@@ -179,8 +193,8 @@
             
             // Production & Economic Facilities
             supply_depot: { name: "Supply Depot", cost: 120, hp: 1200, radius: 28, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'medium', buildTime: 8, desc: "Generates +$15 per 5 sec." },
-            infantry_tent: { name: "Infantry Tent", cost: 100, hp: 1000, radius: 30, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'medium', buildTime: 8, desc: "Required to train infantry." },
-            tank_depot: { name: "Tank Depot", cost: 200, hp: 1500, radius: 35, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', buildTime: 12, desc: "Required to train tanks." }
+            infantry_tent: { name: "Infantry Tent", cost: 100, hp: 1000, radius: 30, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'medium', buildTime: 8, desc: "Trains Mobile Infantry." },
+            tank_depot: { name: "Tank Depot", cost: 200, hp: 1500, radius: 35, damage: 0, range: 0, cooldown: 0, weapon: 'none', armor: 'heavy', buildTime: 12, desc: "Trains Battle Tanks." }
         };
 
         const Utils = {
@@ -206,19 +220,20 @@
                 this.buildings = [];
                 this.bullets = [];
                 this.particles = [];
-                this.buildQueue = []; // Production items in progress
-
-                // Starting HQ Facilities
-                this.playerHQ = new HQ('player', 150, WORLD_HEIGHT / 2);
-                this.enemyHQ = new HQ('enemy', WORLD_WIDTH - 150, WORLD_HEIGHT / 2);
 
                 this.selectedUnits = [];
+                this.selectedBuilding = null;
+
                 this.buildMode = null; 
                 this.buildType = null;
 
                 // Mouse & Camera Dragging
                 this.mouse = { x: 0, y: 0, worldX: 0, worldY: 0, isDown: false, startX: 0, startY: 0, isPanning: false, panStartX: 0, panStartY: 0 };
                 this.keys = {};
+
+                // Starting HQ Facilities
+                this.playerHQ = new HQ('player', 150, WORLD_HEIGHT / 2);
+                this.enemyHQ = new HQ('enemy', WORLD_WIDTH - 150, WORLD_HEIGHT / 2);
 
                 this.terrainCanvas = document.createElement('canvas');
                 this.terrainCtx = this.terrainCanvas.getContext('2d');
@@ -231,14 +246,21 @@
 
             setupStartingBases() {
                 // Setup Player Starting Facilities (Green/Left)
-                this.buildings.push(new Building('supply_depot', 'player', 120, WORLD_HEIGHT / 2 - 120, null, true));
-                this.buildings.push(new Building('infantry_tent', 'player', 120, WORLD_HEIGHT / 2 + 120, null, true));
-                this.buildings.push(new Building('tank_depot', 'player', 260, WORLD_HEIGHT / 2, null, true));
+                const pSupply = new Building('supply_depot', 'player', 120, WORLD_HEIGHT / 2 - 120, null, true);
+                const pTent = new Building('infantry_tent', 'player', 120, WORLD_HEIGHT / 2 + 120, null, true);
+                const pTank = new Building('tank_depot', 'player', 260, WORLD_HEIGHT / 2, null, true);
+
+                this.buildings.push(pSupply, pTent, pTank);
 
                 // Setup Enemy Starting Facilities (Yellow/Right)
-                this.buildings.push(new Building('supply_depot', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 - 120, null, true));
-                this.buildings.push(new Building('infantry_tent', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 + 120, null, true));
-                this.buildings.push(new Building('tank_depot', 'enemy', WORLD_WIDTH - 260, WORLD_HEIGHT / 2, null, true));
+                const eSupply = new Building('supply_depot', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 - 120, null, true);
+                const eTent = new Building('infantry_tent', 'enemy', WORLD_WIDTH - 120, WORLD_HEIGHT / 2 + 120, null, true);
+                const eTank = new Building('tank_depot', 'enemy', WORLD_WIDTH - 260, WORLD_HEIGHT / 2, null, true);
+
+                this.buildings.push(eSupply, eTent, eTank);
+
+                // Auto-select starting Infantry Tent for player
+                this.selectedBuilding = pTent;
             }
 
             cacheTerrain() {
@@ -321,7 +343,7 @@
                 canvas.addEventListener('mousedown', (e) => {
                     updateMousePos(e);
 
-                    // Right Click: Pan Map OR Move/Attack Order
+                    // Right Click: Cancel Build Mode OR Move/Attack Order
                     if (e.button === 2) {
                         e.preventDefault();
 
@@ -336,7 +358,7 @@
                             const targetTeam = localRole === 'player' ? 'enemy' : 'player';
                             
                             const checkEntity = (ent) => {
-                                if (ent.team === targetTeam && !ent.dead && Utils.dist(this.mouse.worldX, this.mouse.worldY, ent.x, ent.y) < (ent.data?.radius || 20)) {
+                                if (ent.team === targetTeam && !ent.dead && Utils.dist(this.mouse.worldX, this.mouse.worldY, ent.x, ent.y) < (ent.radius || 20)) {
                                     targetEnemy = ent;
                                 }
                             };
@@ -389,41 +411,46 @@
                         return;
                     }
 
-                    // Left Click: Build, Train, or Select
+                    // Left Click: Place Defense, Select Facility, or Selection Box
                     if (e.button === 0) {
-                        if (this.buildMode) {
-                            let data = this.buildMode === 'unit' ? UNITS[this.buildType] : BUILDINGS[this.buildType];
-                            
-                            // Check Valid Side Deployment
+                        if (this.buildMode === 'building') {
+                            let data = BUILDINGS[this.buildType];
                             let validX = localRole === 'player' 
-                                ? (this.buildMode === 'unit' ? this.mouse.worldX < WORLD_WIDTH/2 - 20 : this.mouse.worldX < WORLD_WIDTH/2 - 100)
-                                : (this.buildMode === 'unit' ? this.mouse.worldX > WORLD_WIDTH/2 + 20 : this.mouse.worldX > WORLD_WIDTH/2 + 100);
+                                ? this.mouse.worldX < WORLD_WIDTH/2 - 100
+                                : this.mouse.worldX > WORLD_WIDTH/2 + 100;
 
                             if (this.money[localRole] >= data.cost && validX) {
-                                if (this.buildMode === 'unit') {
-                                    // Check Facility Requirement
-                                    const hasFacility = this.buildings.some(b => b.team === localRole && b.type === data.req && !b.dead && b.completed);
-                                    if (!hasFacility) {
-                                        this.showNotice(`Requires an active ${BUILDINGS[data.req].name}!`);
-                                        return;
-                                    }
-
-                                    // Deduct Money & Queue Production
-                                    this.money[localRole] -= data.cost;
-                                    this.queueUnitProduction(this.buildType, localRole);
-                                } else {
-                                    this.money[localRole] -= data.cost;
-                                    const uid = `${localRole}_${Date.now()}_${Math.random()}`;
-                                    const b = new Building(this.buildType, localRole, this.mouse.worldX, this.mouse.worldY, uid, false);
-                                    this.buildings.push(b);
-                                    if (isMultiplayer) socket.emit('build_structure', { type: this.buildType, team: localRole, x: this.mouse.worldX, y: this.mouse.worldY, id: uid });
-                                }
+                                this.money[localRole] -= data.cost;
+                                const uid = `${localRole}_${Date.now()}_${Math.random()}`;
+                                const b = new Building(this.buildType, localRole, this.mouse.worldX, this.mouse.worldY, uid, false);
+                                this.buildings.push(b);
+                                if (isMultiplayer) socket.emit('build_structure', { type: this.buildType, team: localRole, x: this.mouse.worldX, y: this.mouse.worldY, id: uid });
                                 this.updateUI();
                             }
                             return; 
                         }
 
-                        // Start Selection Box
+                        // Check if a Facility/Building on the map was directly clicked
+                        let clickedBld = null;
+                        this.buildings.forEach(b => {
+                            if (!b.dead && Utils.dist(this.mouse.worldX, this.mouse.worldY, b.x, b.y) <= b.radius) {
+                                clickedBld = b;
+                            }
+                        });
+
+                        const hq = localRole === 'player' ? this.playerHQ : this.enemyHQ;
+                        if (Utils.dist(this.mouse.worldX, this.mouse.worldY, hq.x, hq.y) <= hq.radius) {
+                            clickedBld = hq;
+                        }
+
+                        if (clickedBld) {
+                            this.selectedBuilding = clickedBld;
+                            this.selectedUnits = [];
+                            this.updateFactoryPanel();
+                            return;
+                        }
+
+                        // Start Selection Box for Units
                         this.mouse.isDown = true;
                         this.mouse.startX = this.mouse.x;
                         this.mouse.startY = this.mouse.y;
@@ -535,8 +562,37 @@
                 });
             }
 
+            queueUnitToFacility(building, unitType) {
+                if (!building || building.team !== localRole) return;
+                const data = UNITS[unitType];
+
+                if (this.money[localRole] >= data.cost) {
+                    this.money[localRole] -= data.cost;
+                    building.queue.push({
+                        type: unitType,
+                        cost: data.cost,
+                        timer: data.buildTime * 60,
+                        maxTimer: data.buildTime * 60
+                    });
+                    this.updateUI();
+                    this.updateFactoryPanel();
+                } else {
+                    this.showNotice("Insufficient War Funds!");
+                }
+            }
+
+            cancelQueueItem(building, index) {
+                if (!building || !building.queue[index]) return;
+                const item = building.queue[index];
+                this.money[building.team] += item.cost;
+                building.queue.splice(index, 1);
+                this.updateUI();
+                this.updateFactoryPanel();
+            }
+
             showNotice(msg) {
                 const banner = document.getElementById('prep-desc');
+                if (!banner) return;
                 const oldMsg = banner.innerText;
                 banner.innerText = msg;
                 banner.classList.add('text-red-400', 'font-bold');
@@ -546,52 +602,115 @@
                 }, 2500);
             }
 
-            queueUnitProduction(type, team) {
-                const data = UNITS[type];
-                const reqFacility = this.buildings.find(b => b.team === team && b.type === data.req && !b.dead && b.completed);
-                if (!reqFacility) return;
-
-                this.buildQueue.push({
-                    type: type,
-                    team: team,
-                    isUnit: true,
-                    timer: data.buildTime * 60,
-                    maxTimer: data.buildTime * 60,
-                    facilityId: reqFacility.id
-                });
-            }
-
             startMatch() {
                 this.state = 'PLAYING';
                 document.getElementById('prep-banner').classList.add('hidden');
             }
 
             initUI() {
-                const uDiv = document.getElementById('build-units');
                 const bDiv = document.getElementById('build-defenses');
-                uDiv.innerHTML = '';
                 bDiv.innerHTML = '';
                 
-                const createBtn = (type, data, isBuilding) => {
+                Object.keys(BUILDINGS).forEach(k => {
+                    const data = BUILDINGS[k];
                     let btn = document.createElement('button');
-                    btn.className = `flex-shrink-0 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-1.5 text-left w-32 transition text-xs flex flex-col justify-between`;
+                    btn.className = `flex-shrink-0 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded p-1.5 text-left w-32 transition text-xs flex flex-col justify-between h-full shadow`;
                     btn.innerHTML = `
                         <div>
                             <div class="font-bold text-white leading-tight">${data.name}</div>
                             <div class="text-green-400 font-mono text-[11px] mb-0.5">$${data.cost} <span class="text-gray-400 text-[9px]">(${data.buildTime}s)</span></div>
                         </div>
-                        <div class="text-[9px] text-gray-400 leading-tight mt-1">${data.desc}</div>
+                        <div class="text-[9px] text-gray-400 leading-tight mt-0.5 truncate">${data.desc}</div>
                     `;
                     btn.onclick = () => {
-                        this.buildMode = isBuilding ? 'building' : 'unit';
-                        this.buildType = type;
-                        this.selectedUnits = []; 
+                        this.buildMode = 'building';
+                        this.buildType = k;
                     };
-                    return btn;
-                };
+                    bDiv.appendChild(btn);
+                });
 
-                Object.keys(UNITS).forEach(k => uDiv.appendChild(createBtn(k, UNITS[k], false)));
-                Object.keys(BUILDINGS).forEach(k => bDiv.appendChild(createBtn(k, BUILDINGS[k], true)));
+                this.updateFactoryPanel();
+            }
+
+            updateFactoryPanel() {
+                const titleEl = document.getElementById('factory-title');
+                const hpEl = document.getElementById('factory-hp');
+                const optionsEl = document.getElementById('factory-train-options');
+                const queueListEl = document.getElementById('factory-queue-list');
+                const queueCountEl = document.getElementById('factory-queue-count');
+
+                optionsEl.innerHTML = '';
+                queueListEl.innerHTML = '';
+
+                const b = this.selectedBuilding;
+
+                if (!b || b.dead) {
+                    titleEl.innerText = "No Facility Selected";
+                    titleEl.className = "text-xs font-bold text-gray-400";
+                    hpEl.innerText = "";
+                    queueCountEl.innerText = "";
+                    optionsEl.innerHTML = `<p class="text-xs text-gray-500 italic py-2">Click an Infantry Tent, Tank Depot, or HQ on map to train units.</p>`;
+                    return;
+                }
+
+                titleEl.innerText = `${b.data?.name || 'Headquarters'} (${b.team === localRole ? 'Your Base' : 'Enemy Base'})`;
+                titleEl.className = `text-xs font-bold ${b.team === 'player' ? 'text-green-400' : 'text-yellow-400'}`;
+                hpEl.innerText = `[HP: ${Math.floor(b.hp)}/${b.maxHp}]`;
+
+                if (b.team !== localRole) {
+                    optionsEl.innerHTML = `<p class="text-xs text-red-400 italic py-2">Enemy facility selected - Cannot manage training queue.</p>`;
+                    queueCountEl.innerText = "";
+                    return;
+                }
+
+                if (!b.completed) {
+                    optionsEl.innerHTML = `<p class="text-xs text-yellow-400 italic py-2">Under Construction... (${Math.ceil(b.buildTimer / 60)}s remaining)</p>`;
+                    queueCountEl.innerText = "";
+                    return;
+                }
+
+                // Find trainable units for this facility type
+                const trainable = Object.keys(UNITS).filter(k => UNITS[k].req === b.type || (b.isHQ && (k === 'grunt' || k === 'mg')));
+
+                if (trainable.length === 0) {
+                    optionsEl.innerHTML = `<p class="text-xs text-gray-400 italic py-2">Defensive facility (No active unit training queue).</p>`;
+                } else {
+                    trainable.forEach(unitKey => {
+                        const uData = UNITS[unitKey];
+                        let btn = document.createElement('button');
+                        btn.className = `bg-green-700 hover:bg-green-600 text-white border border-green-500 rounded px-2.5 py-1 text-left transition text-xs flex flex-col justify-center shadow`;
+                        btn.innerHTML = `
+                            <div class="font-bold leading-none">${uData.name}</div>
+                            <div class="text-[10px] text-green-200 font-mono mt-0.5">$${uData.cost} (${uData.buildTime}s)</div>
+                        `;
+                        btn.onclick = () => this.queueUnitToFacility(b, unitKey);
+                        optionsEl.appendChild(btn);
+                    });
+                }
+
+                // Render Queue Items
+                if (b.queue && b.queue.length > 0) {
+                    queueCountEl.innerText = `Queue: ${b.queue.length} item(s)`;
+                    b.queue.forEach((item, idx) => {
+                        const uData = UNITS[item.type];
+                        const progressPct = Math.floor(((item.maxTimer - item.timer) / item.maxTimer) * 100);
+
+                        let qCard = document.createElement('div');
+                        qCard.className = `relative flex-shrink-0 bg-gray-800 border ${idx === 0 ? 'border-yellow-500' : 'border-gray-600'} rounded p-1 text-xs w-28 flex justify-between items-center shadow`;
+                        qCard.innerHTML = `
+                            <div class="overflow-hidden">
+                                <div class="font-bold text-[11px] text-white truncate">${uData.name}</div>
+                                <div class="text-[9px] font-mono text-gray-300">${idx === 0 ? `${progressPct}%` : 'Queued'}</div>
+                            </div>
+                            <button title="Cancel & Refund" class="text-gray-400 hover:text-red-400 font-bold px-1 text-xs">✕</button>
+                        `;
+                        qCard.querySelector('button').onclick = () => this.cancelQueueItem(b, idx);
+                        queueListEl.appendChild(qCard);
+                    });
+                } else {
+                    queueCountEl.innerText = "Queue: Empty";
+                    queueListEl.innerHTML = `<span class="text-[11px] text-gray-500 italic">No units in production</span>`;
+                }
             }
 
             addMoney(team, amt) {
@@ -643,32 +762,12 @@
                 if (this.state === 'PLAYING') {
                     if (this.supplyCooldown.player > 0) this.supplyCooldown.player--;
                     if (this.supplyCooldown.enemy > 0) this.supplyCooldown.enemy--;
-                    if (this.frameCount % 10 === 0) this.updateUI();
-
-                    // Process Production Queue
-                    for (let i = this.buildQueue.length - 1; i >= 0; i--) {
-                        let q = this.buildQueue[i];
-                        q.timer--;
-
-                        if (q.timer <= 0) {
-                            if (q.isUnit) {
-                                const facility = this.buildings.find(b => b.id === q.facilityId && !b.dead);
-                                const spawnX = facility ? facility.x + (q.team === 'player' ? 40 : -40) : (q.team === 'player' ? 200 : WORLD_WIDTH - 200);
-                                const spawnY = facility ? facility.y : WORLD_HEIGHT / 2;
-
-                                const uid = `${q.team}_${Date.now()}_${Math.random()}`;
-                                const u = new Unit(q.type, q.team, spawnX, spawnY, uid);
-                                this.units.push(u);
-
-                                if (isMultiplayer && q.team === localRole) {
-                                    socket.emit('spawn_unit', { type: q.type, team: q.team, x: spawnX, y: spawnY, id: uid });
-                                }
-                            }
-                            this.buildQueue.splice(i, 1);
-                        }
+                    if (this.frameCount % 10 === 0) {
+                        this.updateUI();
+                        if (this.frameCount % 20 === 0) this.updateFactoryPanel();
                     }
 
-                    // Single Player AI Logic
+                    // Single Player AI Production Queue Logic
                     if (!isMultiplayer) {
                         if (this.supplyCooldown.enemy <= 0) {
                             this.addMoney('enemy', 2000);
@@ -676,21 +775,24 @@
                             this.createExplosion(this.enemyHQ.x, this.enemyHQ.y, '#fef08a', 30);
                         }
 
-                        // AI Unit Production Wave
-                        if (this.money.enemy > 500 && Math.random() < 0.02) {
-                            let spawned = 0;
-                            while (this.money.enemy >= 15 && spawned < 8) {
-                                const affordable = Object.keys(UNITS).filter(k => {
-                                    const req = UNITS[k].req;
-                                    const hasReq = this.buildings.some(b => b.team === 'enemy' && b.type === req && !b.dead && b.completed);
-                                    return UNITS[k].cost <= this.money.enemy && hasReq;
-                                });
-                                if (affordable.length > 0) {
-                                    let type = affordable[Math.floor(Math.random() * affordable.length)];
-                                    this.money.enemy -= UNITS[type].cost;
-                                    this.queueUnitProduction(type, 'enemy');
-                                    spawned++;
-                                } else break;
+                        // AI Unit Production Waves
+                        if (this.money.enemy > 400 && Math.random() < 0.02) {
+                            const activeTents = this.buildings.filter(b => b.team === 'enemy' && (b.type === 'infantry_tent' || b.type === 'tank_depot') && !b.dead && b.completed);
+                            if (activeTents.length > 0) {
+                                let targetFacility = activeTents[Math.floor(Math.random() * activeTents.length)];
+                                const trainable = Object.keys(UNITS).filter(k => UNITS[k].req === targetFacility.type);
+                                if (trainable.length > 0) {
+                                    let unitType = trainable[Math.floor(Math.random() * trainable.length)];
+                                    if (this.money.enemy >= UNITS[unitType].cost) {
+                                        this.money.enemy -= UNITS[unitType].cost;
+                                        targetFacility.queue.push({
+                                            type: unitType,
+                                            cost: UNITS[unitType].cost,
+                                            timer: UNITS[unitType].buildTime * 60,
+                                            maxTimer: UNITS[unitType].buildTime * 60
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
@@ -709,7 +811,13 @@
                 for (let i = this.buildings.length - 1; i >= 0; i--) {
                     let b = this.buildings[i];
                     b.update(this);
-                    if (b.dead) this.buildings.splice(i, 1);
+                    if (b.dead) {
+                        if (this.selectedBuilding === b) {
+                            this.selectedBuilding = null;
+                            this.updateFactoryPanel();
+                        }
+                        this.buildings.splice(i, 1);
+                    }
                 }
 
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
@@ -810,26 +918,35 @@
                 this.bullets.forEach(b => b.draw(ctx));
                 this.particles.forEach(p => p.draw(ctx));
 
-                // Selection Indicators
+                // Selected Building Outline
+                if (this.selectedBuilding && !this.selectedBuilding.dead) {
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(this.selectedBuilding.x, this.selectedBuilding.y, this.selectedBuilding.radius + 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Selection Indicators for Units
                 this.selectedUnits.forEach(u => {
                     ctx.strokeStyle = localRole === 'player' ? '#4ade80' : '#fde047';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
-                    ctx.arc(u.x, u.y, (u.data?.radius || 12) + 4, 0, Math.PI * 2);
+                    ctx.arc(u.x, u.y, (u.radius || 12) + 4, 0, Math.PI * 2);
                     ctx.stroke();
                 });
 
                 // Build Preview Cursor
-                if (this.buildMode) {
+                if (this.buildMode === 'building') {
                     ctx.globalAlpha = 0.5;
-                    let color = this.buildMode === 'unit' ? '#4ade80' : '#3b82f6';
-                    let r = this.buildMode === 'unit' ? 12 : BUILDINGS[this.buildType].radius;
+                    let color = '#3b82f6';
+                    let r = BUILDINGS[this.buildType].radius;
                     ctx.fillStyle = color;
                     ctx.beginPath();
                     ctx.arc(this.mouse.worldX, this.mouse.worldY, r, 0, Math.PI*2);
                     ctx.fill();
                     
-                    let range = this.buildMode === 'unit' ? UNITS[this.buildType].range : BUILDINGS[this.buildType].range;
+                    let range = BUILDINGS[this.buildType].range;
                     if (range > 0) {
                         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
                         ctx.lineWidth = 1;
@@ -895,9 +1012,12 @@
 
         class HQ {
             constructor(team, x, y) {
+                this.id = `${team}_hq`;
+                this.type = 'hq';
                 this.team = team;
                 this.x = x;
                 this.y = y;
+                this.isHQ = true;
                 this.maxHp = 5000;
                 this.hp = this.maxHp;
                 this.radius = 40;
@@ -909,10 +1029,32 @@
                 this.cooldownTimer = 0;
                 this.maxCooldown = 30;
                 this.splash = 0; 
+
+                this.completed = true;
+                this.queue = [];
             }
 
             update(game) {
                 if (this.hp <= 0 || game.state === 'PREP') return;
+
+                // Process Production Queue
+                if (this.queue.length > 0) {
+                    let item = this.queue[0];
+                    item.timer--;
+                    if (item.timer <= 0) {
+                        const spawnX = this.x + (this.team === 'player' ? 50 : -50);
+                        const spawnY = this.y;
+                        const uid = `${this.team}_${Date.now()}_${Math.random()}`;
+                        const u = new Unit(item.type, this.team, spawnX, spawnY, uid);
+                        game.units.push(u);
+
+                        if (isMultiplayer && this.team === localRole) {
+                            socket.emit('spawn_unit', { type: item.type, team: this.team, x: spawnX, y: spawnY, id: uid });
+                        }
+                        this.queue.shift();
+                        if (game.selectedBuilding === this) game.updateFactoryPanel();
+                    }
+                }
 
                 if (this.cooldownTimer > 0) this.cooldownTimer--;
 
@@ -1125,10 +1267,11 @@
                 this.target = null;
                 this.color = team === 'player' ? '#14532d' : '#713f12'; 
 
-                // Construction Progress
+                // Construction & Queue State
                 this.completed = instant;
                 this.buildTimer = instant ? 0 : this.data.buildTime * 60;
                 this.maxBuildTimer = this.data.buildTime * 60;
+                this.queue = []; 
             }
 
             update(game) {
@@ -1144,8 +1287,29 @@
                     if (this.buildTimer <= 0) {
                         this.completed = true;
                         game.createExplosion(this.x, this.y, '#4ade80', 10, 2);
+                        if (game.selectedBuilding === this) game.updateFactoryPanel();
                     }
                     return;
+                }
+
+                // Process Facility Unit Production Queue
+                if (this.queue.length > 0) {
+                    let item = this.queue[0];
+                    item.timer--;
+                    if (item.timer <= 0) {
+                        const spawnX = this.x + (this.team === 'player' ? 45 : -45);
+                        const spawnY = this.y;
+
+                        const uid = `${this.team}_${Date.now()}_${Math.random()}`;
+                        const u = new Unit(item.type, this.team, spawnX, spawnY, uid);
+                        game.units.push(u);
+
+                        if (isMultiplayer && this.team === localRole) {
+                            socket.emit('spawn_unit', { type: item.type, team: this.team, x: spawnX, y: spawnY, id: uid });
+                        }
+                        this.queue.shift();
+                        if (game.selectedBuilding === this) game.updateFactoryPanel();
+                    }
                 }
                 
                 if (game.state === 'PREP') return;
@@ -1261,6 +1425,13 @@
                 }
 
                 ctx.restore();
+
+                // Draw Queue Overlay Indicator over Building
+                if (this.queue.length > 0) {
+                    ctx.fillStyle = '#eab308';
+                    ctx.font = 'bold 11px Inter font-mono';
+                    ctx.fillText(`Q:${this.queue.length}`, this.x - 10, this.y + this.radius + 14);
+                }
 
                 if (this.hp < this.maxHp) {
                     ctx.fillStyle = 'rgba(255,0,0,0.8)';
